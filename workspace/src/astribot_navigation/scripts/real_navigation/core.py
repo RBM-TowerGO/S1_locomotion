@@ -7,7 +7,9 @@ import secrets
 
 
 SCAN_MAX_SOURCE_AGE = 1.0
-BROWSER_LEASE_SECONDS = 2.0
+# Raised 2.0 -> 5.0 s (2026-11-05) to ride out SSH-tunnel / background-tab stalls.
+# If the browser really disconnects, the robot keeps navigating up to this long.
+BROWSER_LEASE_SECONDS = 5.0
 LOCALIZATION_MAX_SOURCE_AGE = .8
 
 
@@ -57,13 +59,17 @@ def speed(value):
     return value
 
 
+# Hard yaw-rate cap for real-robot navigation (raised 0.1 -> 0.3 rad/s, 2026-11-05).
+MAX_ANGULAR_SPEED = .3
+
+
 def limited(v, w, maximum):
     maximum = speed(maximum)
     if not all(math.isfinite(x) for x in (v, w)) or v < 0:
         raise ValueError('仅接受有限的前进和转向速度')
     if maximum == 0:
         return 0., 0.
-    scale = min(1., maximum / v if v else 1., .1 / abs(w) if w else 1.)
+    scale = min(1., maximum / v if v else 1., MAX_ANGULAR_SPEED / abs(w) if w else 1.)
     return v * scale, w * scale
 
 
@@ -103,6 +109,8 @@ def validate_config(config, hardware=False):
         raise ValueError('Invalid obstacle height')
     if not 0 < config['slice_thickness'] <= .5:
         raise ValueError('Invalid slice thickness')
+    if config.get('scan_input','lio_body') not in ('lio_body','raw_pair'):
+        raise ValueError('scan_input must be lio_body or raw_pair')
     for box in config.get('self_filter_boxes',[]):
         lower,upper=np.asarray(box['min'],float),np.asarray(box['max'],float)
         if lower.shape!=(3,) or upper.shape!=(3,) or not np.isfinite([lower,upper]).all() or not (lower<upper).all():
@@ -112,7 +120,7 @@ def validate_config(config, hardware=False):
     speed(config['max_speed'])
     if config['max_speed'] <= 0:
         raise ValueError('导航最高速度必须大于 0')
-    for key, maximum in (('feedback_timeout', .5), ('max_position_error', .1), ('max_yaw_error', .2)):
+    for key, maximum in (('feedback_timeout', .5), ('max_position_error', .25), ('max_yaw_error', .2)):
         if not 0 < config[key] <= maximum:
             raise ValueError('Invalid control limit: ' + key)
 

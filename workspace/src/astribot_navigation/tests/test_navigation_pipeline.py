@@ -228,13 +228,13 @@ def test_scan_latency_tolerance_is_bounded_without_weakening_other_streams():
 
 
 def test_browser_lease_tolerates_transport_jitter_but_still_expires():
-    from real_navigation.core import Lease
+    from real_navigation.core import Lease,BROWSER_LEASE_SECONDS as L
     lease=Lease();task=lease.begin('a'*32,10.)
     assert lease.valid(task,10.6)
     assert lease.heartbeat('a'*32,task,11.2)
-    assert lease.valid(task,13.19)
-    assert not lease.valid(task,13.2)
-    assert not lease.heartbeat('a'*32,task,13.2)
+    assert lease.valid(task,11.2+L-.01)
+    assert not lease.valid(task,11.2+L)
+    assert not lease.heartbeat('a'*32,task,11.2+L)
     lease.stop()
     assert not lease.heartbeat('a'*32,task,11.3)
 

@@ -17,17 +17,24 @@ footprint: [[0.50, 0.40], [0.50, -0.40], [-0.40, -0.40], [-0.40, 0.40]]
 # User-confirmed robot body envelope in base XY, at every height.
 # Confirmed extent: forward 0.50 m, rearward 0.40 m, left/right 0.40 m.
 self_filter: [[-0.40, -0.40], [0.50, -0.40], [0.50, 0.40], [-0.40, 0.40]]
-footprint_padding: 0.05
-inflation_radius: 0.85
-planning_turning_radius: 1.0
+# Relaxed for tight spaces (user request 2026-11-05): 0.05 -> 0.02 m, 1.0 -> 0.5 m.
+footprint_padding: 0.02
+inflation_radius: 0.75
+planning_turning_radius: 0.5
 collision_time_horizon: 1.5
+# AMCL scan source. lio_body: FAST-LIO's deskewed body cloud, published with
+# its pose (no pose wait). raw_pair: previous per-lidar Python deskew path.
+# Per-lidar obstacle clouds for retreat checks are produced in both modes.
+scan_input: lio_body
 slice_height: 0.054
 slice_thickness: 0.10
 obstacle_min_height: 0.02
 obstacle_max_height: 2.0
 feedback_timeout: 0.15
-max_position_error: 0.10
-max_yaw_error: 0.10
+# Target lead budget (raised 2026-11-05 so the chassis can track 0.3 m/s / 0.3 rad/s).
+# On executor/link failure the chassis may still travel up to this lead.
+max_position_error: 0.25
+max_yaw_error: 0.20
 
 # Validated by isolated real-AMCL stationary/turning A/B; no zero-threshold resampling.
 amcl_update_min_d: 0.05

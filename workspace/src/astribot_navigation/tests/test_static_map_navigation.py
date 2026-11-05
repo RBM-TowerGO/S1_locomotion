@@ -15,25 +15,26 @@ def test_both_costmaps_use_only_saved_map(replay):
         assert p['plugins']==['static_layer','inflation_layer']
         assert 'obstacle_layer' not in p and 'voxel_layer' not in p
         assert p['static_layer']['map_topic']=='/towergo/nav/map'
-        assert p['inflation_layer']['inflation_radius']==.85
-        assert p['footprint_padding']==.05
+        assert p['inflation_layer']['inflation_radius']==.75
+        assert p['footprint_padding']==config['footprint_padding']
         assert p['track_unknown_space']
     assert params['controller_server']['ros__parameters']['FollowPath']['use_collision_detection']
     assert params['map_server']['ros__parameters']['yaml_filename']=='/tmp/unchanged-map.yaml'
     assert params['amcl']['ros__parameters']['scan_topic']=='/towergo/nav/scan'
 
 
-def test_wide_turn_profile_uses_actual_one_meter_primitives():
+def test_turn_profile_uses_configured_turning_radius_primitives():
     import json
     config=yaml.safe_load((ROOT/'scripts/real_navigation/navigation.yaml').read_text())
+    radius=config['planning_turning_radius']
     params=nav_params(config,Path('/tmp/map.yaml'),False)['towergo']['nav']
     planner=params['planner_server']['ros__parameters']['GridBased']
-    assert '/1m_turning_radius/ackermann/' in planner['lattice_filepath']
+    assert '/%sm_turning_radius/ackermann/'%format(radius,'g') in planner['lattice_filepath']
     assert planner['prefer_straight_route'] is False and planner['smooth_path'] is False
     assert set(map(tuple,config['footprint']))==set(map(tuple,config['self_filter']))
     path=Path(planner['lattice_filepath'])
     if path.exists():
-        assert json.loads(path.read_text())['lattice_metadata']['turning_radius']==1
+        assert json.loads(path.read_text())['lattice_metadata']['turning_radius']==radius
 
 
 def test_start_inside_enlarged_clearance_is_rejected_before_executor_prepare():

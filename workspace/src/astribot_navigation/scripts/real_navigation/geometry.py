@@ -169,6 +169,24 @@ def safe_pose(grid, pose, footprint, padding=.06):
     return True
 
 
+def cloud_xyz(msg, limit=300000):
+    """Finite float32 x/y/z of a PointCloud2 (e.g. FAST-LIO PointXYZINormal)."""
+    fields={f.name:f for f in msg.fields}
+    n=msg.width*msg.height
+    if not 0<=n<=limit or msg.is_bigendian or msg.row_step<msg.width*msg.point_step or len(msg.data)<msg.height*msg.row_step:
+        raise ValueError('Invalid body cloud layout')
+    if n==0:return np.empty((0,3))
+    columns=[]
+    for name in ('x','y','z'):
+        f=fields.get(name)
+        if f is None or f.datatype!=7 or f.count!=1 or f.offset<0 or f.offset+4>msg.point_step:
+            raise ValueError('Invalid body cloud field: '+name)
+        columns.append(np.ndarray((msg.height,msg.width),dtype='<f4',buffer=msg.data,offset=f.offset,
+                                  strides=(msg.row_step,msg.point_step)).ravel())
+    points=np.column_stack(columns).astype(float)
+    return points[np.isfinite(points).all(axis=1)]
+
+
 def scan_points(ranges, minimum=.15, maximum=20.):
     """Finite horizontal scan endpoints, in the scan frame; no inferred returns."""
     ranges=np.asarray(ranges,float)

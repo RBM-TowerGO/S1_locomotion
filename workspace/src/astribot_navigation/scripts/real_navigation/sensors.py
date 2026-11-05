@@ -6,7 +6,7 @@ from collections import deque
 import numpy as np
 import rclpy
 from scipy.spatial.transform import Rotation
-from .geometry import Geometry, matrix, scan_points
+from .geometry import Geometry, matrix, scan_points, cloud_xyz
 from .pipeline import Metrics, CloudWorker, match_scans
 from .core import sensor_fresh
 from .stability import Window
@@ -24,6 +24,10 @@ class Sensors:
         from tf2_ros import TransformBroadcaster,StaticTransformBroadcaster
         self.node,self.config=node,config
         self.geometry=Geometry(config)
+        self.scan_input=config.get('scan_input','lio_body')
+        # FAST-LIO body points are p_imu = imu_from_lidar * p_lidar (front lidar).
+        self.lidar_from_imu=np.linalg.inv(self.geometry.imu_lidar)
+        self.pose_by_ns=deque(maxlen=32);self.pending_body=None
         self.geometry_lock=threading.Lock();self.snapshot_key=None;self.cached_snapshot=None
         self.metrics=Metrics();self.arrivals={}
         self.settling=Window(.25)
@@ -47,11 +51,17 @@ class Sensors:
             self.static_transforms.append(self.tf_msg(t,FRAME['base'],FRAME[key],rclpy.time.Time().to_msg()))
         self.static.sendTransform(self.static_transforms)
         node.create_subscription(Imu,'/livox/imu_front',self.imu,qos_profile_sensor_data)
-        node.create_subscription(Odometry,NS+'lio/odometry',self.pose,10)
+        # With the large body cloud on the wire, a reliable odometry reader
+        # stalls ~2 s waiting for repair of a lost sample. Best effort skips
+        # it instead; the 0.5 s pose-gap and receive watchdogs still apply.
+        odom_qos=qos_profile_sensor_data if self.scan_input=='lio_body' else 10
+        node.create_subscription(Odometry,NS+'lio/odometry',self.pose,odom_qos)
         from diagnostic_msgs.msg import DiagnosticArray
         node.create_subscription(DiagnosticArray,NS+'lio/diagnostics',self.fusion_diagnostics,qos_profile_sensor_data)
         for key,topic in [('front','/livox/lidar_front'),('back','/livox/lidar_back')]:
             node.create_subscription(PointCloud2,topic,lambda m,k=key:self.cloud(m,k),qos_profile_sensor_data)
+        if self.scan_input=='lio_body':
+            node.create_subscription(PointCloud2,NS+'lio/cloud_body',self.body,qos_profile_sensor_data)
         q=QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL)
         node.create_subscription(Bool,NS+'lio/fault',lambda m:self.fail('双雷达适配器故障') if m.data else None,q)
 
@@ -129,6 +139,7 @@ class Sensors:
                 self.latest_scan_source_stamp=None;self.latest_scan_stamp_ns=None
                 for history in self.scan_history.values():history.clear()
                 self.received.pop('scan',None)
+                self.pose_by_ns.clear();self.pending_body=None
                 self.recovering_until=time.monotonic()+.5
             if self.last_pose:
                 old_stamp,old=self.last_pose;dt=stamp-old_stamp
@@ -139,6 +150,7 @@ class Sensors:
             if self.last_pose is None:self.static.sendTransform(self.static_transforms)
             self.last_pose=(stamp,t)
             self.last_pose_stamp_ns=msg.header.stamp.sec*1000000000+msg.header.stamp.nanosec
+            self.pose_by_ns.append((self.last_pose_stamp_ns,t))
             out=Odometry();out.header.stamp=msg.header.stamp;out.header.frame_id=FRAME['odom'];out.child_frame_id=FRAME['base']
             out.pose.pose.position.x,out.pose.pose.position.y,out.pose.pose.position.z=map(float,t[:3,3])
             q=Rotation.from_matrix(t[:3,:3]).as_quat()
@@ -148,7 +160,56 @@ class Sensors:
             out.pose.covariance=(np.eye(6)*.05).ravel().tolist();out.twist.covariance=(np.eye(6)*.05).ravel().tolist()
             self.odom_pub.publish(out);self.tf.sendTransform(self.tf_msg(t,FRAME['odom'],FRAME['base'],msg.header.stamp))
             self.metrics.add('odom_tf_source_age_s',self.node.get_clock().now().nanoseconds*1e-9-stamp)
+            if self.scan_input=='lio_body':self.publish_body_scan(self.node.get_clock().now().nanoseconds*1e-9)
         except Exception as exc:self.fail(str(exc))
+
+    def body(self,msg):
+        stamp=self.seen('body',msg)
+        if stamp is None or self.error:return
+        if self.pending_body is not None:self.metrics.count('body_superseded')
+        ns=msg.header.stamp.sec*1000000000+msg.header.stamp.nanosec
+        self.pending_body=(ns,stamp,msg)
+        try:self.publish_body_scan(self.node.get_clock().now().nanoseconds*1e-9)
+        except Exception as exc:self.fail(str(exc))
+
+    def publish_body_scan(self,now):
+        """AMCL scan from FAST-LIO's deskewed cloud and the pose of the same stamp.
+
+        FAST-LIO publishes odometry and the body cloud from one iteration, both
+        at lidar_end_time, so only an exact integer-ns pose match is accepted:
+        no interpolation, extrapolation or waiting for a later pose.
+        """
+        from sensor_msgs.msg import LaserScan
+        if self.pending_body is None:return
+        ns,stamp,msg=self.pending_body
+        if not -.05<=now-stamp<=.5:
+            self.pending_body=None;self.metrics.count('body_stale_discarded');return
+        pose=next((t for k,t in self.pose_by_ns if k==ns),None)
+        if pose is None:
+            if self.pose_by_ns and self.pose_by_ns[-1][0]>ns:
+                self.pending_body=None;self.metrics.count('body_pose_missing')
+            else:self.metrics.count('body_waiting_pose')
+            return
+        self.pending_body=None
+        if self.latest_scan and stamp<=self.latest_scan[0]:
+            self.metrics.count('body_out_of_order_discarded');return
+        begin=time.monotonic()
+        body=cloud_xyz(msg)
+        lidar=body@self.lidar_from_imu[:3,:3].T+self.lidar_from_imu[:3,3]
+        # Same self filter, range limits, gravity-level slice and 720 bins as
+        # the per-lidar path; ranges are relative to the front lidar origin.
+        _,ranges=self.geometry.cloud(lidar,pose)
+        scan=LaserScan();scan.header.stamp=msg.header.stamp;scan.header.frame_id=FRAME['front']
+        scan.angle_min=-math.pi;scan.angle_increment=2*math.pi/720;scan.angle_max=-math.pi+719*scan.angle_increment
+        scan.range_min=.15;scan.range_max=20.;scan.scan_time=.1;scan.ranges=ranges.tolist()
+        self.latest_scan=(stamp,scan_points(ranges).tolist())
+        self.latest_scan_source_stamp=stamp;self.latest_scan_stamp_ns=ns
+        self.scan_pub.publish(scan);self.received['scan']=time.monotonic();self.stamps['scan']=stamp
+        self.metrics.add('body_points',len(body))
+        self.metrics.add('body_processing_ms',(time.monotonic()-begin)*1000)
+        self.metrics.add('scan_source_age_s',now-stamp)
+        self.metrics.add('scan_reference_age_s',now-stamp)
+        self.metrics.count('scan_published')
 
     def cloud(self,msg,key):
         if self.seen(key,msg) is None or self.error:return
@@ -179,7 +240,10 @@ class Sensors:
         # Collect the complete result batch first. Retry the retained pair even
         # without new cloud results: LIO may now provide a newer reference pose.
         if not self.error:
-            try:self.publish_cached_scan(self.node.get_clock().now().nanoseconds*1e-9)
+            try:
+                now=self.node.get_clock().now().nanoseconds*1e-9
+                if self.scan_input=='lio_body':self.publish_body_scan(now)
+                else:self.publish_cached_scan(now)
             except Exception as exc:self.fail(str(exc))
         self.metrics.add('flush_ms',(time.monotonic()-started)*1000)
 

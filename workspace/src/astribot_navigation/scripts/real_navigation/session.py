@@ -11,7 +11,7 @@ import sys
 import time
 import uuid
 import yaml
-from .core import validate_config,digest,costmap_inflation_radius
+from .core import validate_config,digest,costmap_inflation_radius,MAX_ANGULAR_SPEED
 
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
@@ -46,6 +46,7 @@ def nav_params(config,mapfile,replay):
     # Continuous curved following: normal path curvature must not trigger the
     # stopped-corner state machine. Initial/terminal alignment remains allowed.
     cp['FollowPath']['plugin']='nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController'
+    cp['FollowPath'].update(rotate_to_heading_angular_vel=MAX_ANGULAR_SPEED,max_angular_accel=MAX_ANGULAR_SPEED)
     cp['FollowPath'].update(use_rotate_to_heading=True,rotate_to_heading_min_angle=.7,
                            lookahead_dist=.5,use_velocity_scaled_lookahead_dist=False)
     cp['goal_checker'].update(plugin='nav2_controller::SimpleGoalChecker')
@@ -71,6 +72,27 @@ def nav_params(config,mapfile,replay):
     return {'towergo':{'nav':base}}
 
 
+def configure_lio_output(lio_parameters,config):
+    """Select FAST-LIO cloud output for the configured AMCL scan source."""
+    import numpy as np
+    p=lio_parameters['/**']['ros__parameters']
+    if config.get('scan_input','lio_body')=='lio_body':
+        # The body cloud is only published together with the (downsampled)
+        # world cloud. Dense output stays off; the body cloud is always the
+        # full deskewed scan regardless of dense_publish_en.
+        p['publish'].update(scan_publish_en=True,scan_bodyframe_pub_en=True,dense_publish_en=False)
+        # Body points are converted back with navigation.yaml imu_from_lidar;
+        # both extrinsic copies must describe the same transform.
+        imu=np.asarray(config['imu_from_lidar'],float)
+        rotation=np.asarray(p['mapping']['extrinsic_R'],float).reshape(3,3)
+        translation=np.asarray(p['mapping']['extrinsic_T'],float)
+        if not (np.allclose(rotation,imu[:3,:3],atol=1e-6) and np.allclose(translation,imu[:3,3],atol=1e-6)):
+            raise ValueError('FAST-LIO 外参与 navigation.yaml imu_from_lidar 不一致')
+    else:
+        # Raw-pair mode derives scans from raw sensors; skip cloud serialization.
+        p['publish']['scan_publish_en']=False
+
+
 def start_live_sensors(node, replay, pump):
     from mapping_support import REQUIRED_RAW_TOPICS
     from tg_mapping import lidar_control
@@ -88,7 +110,7 @@ def start_live_sensors(node, replay, pump):
 
 def parser():
     p=argparse.ArgumentParser(description='S1 真机网页导航，默认只观察，不加载 SDK')
-    p.add_argument('--map',default=str(WORKSPACE/'data/maps/web_sim_manual_20261021_v4/map.yaml'))
+    p.add_argument('--map',default=str(WORKSPACE/'data/maps/manual_edit_20261105_speckle_fill/map.yaml'))
     p.add_argument('--config',default=str(HERE/'navigation.yaml'))
     p.add_argument('--mode',choices=['observe','hardware','mock'],default='observe')
     p.add_argument('--port',type=int,default=8767)
@@ -171,7 +193,7 @@ def main():
         # Navigation derives both obstacle clouds directly from raw sensors.
         # The registered visualization cloud is unused; avoid transforming and
         # serializing it on FAST-LIO's real-time estimation thread.
-        lio_parameters['/**']['ros__parameters']['publish']['scan_publish_en']=False
+        configure_lio_output(lio_parameters,config)
         (run/'lio.yaml').write_text(yaml.safe_dump(lio_parameters))
         sim=str(bool(args.replay)).lower()
         adapter=Path(get_package_prefix('towergo_dual_livox'))/'lib/towergo_dual_livox/dual_adapter'
@@ -183,7 +205,7 @@ def main():
         spawn('adapter',cmd)
         fast=Path(get_package_prefix('fast_lio'))/'lib/fast_lio/fastlio_mapping'
         cmd=[str(fast),'--ros-args','--params-file',str(run/'lio.yaml'),'-r','__node:=navigation_fastlio']
-        for old,key in [('/Odometry','odom'),('/cloud_registered','cloud'),('/tf','tf'),('/tf_static','tf_static')]:cmd+=['-r',old+':='+topics[key]]
+        for old,key in [('/Odometry','odom'),('/cloud_registered','cloud'),('/cloud_registered_body','body'),('/tf','tf'),('/tf_static','tf_static')]:cmd+=['-r',old+':='+topics[key]]
         spawn('fastlio',cmd)
         spawn('nav2',['ros2','launch',str(HERE/'launch.py'),'params:='+str(run/'nav2.yaml')])
         if args.mode in ('hardware','mock'):spawn('executor',[sys.executable,'-m','real_navigation.executor',str(run/'config.yaml'),args.mode])

@@ -36,7 +36,7 @@ def setup():
         scans={k:(10.1,ranges) for k in ('front','back')},
         scan_history={k:deque([(10.1,ranges)],maxlen=6) for k in ('front','back')},
         latest_scan_source_stamp=10.,last_pose=(10.3,np.eye(4)),last_pose_stamp_ns=10300000000,
-        latest_scan=(10.2,[]),scan_pub=Publisher(),received={},stamps={})
+        latest_scan=(10.2,[]),scan_pub=Publisher(),received={},stamps={},scan_input='raw_pair')
     n.fail=lambda text:setattr(n,'error',text)
     for name in ('flush','publish_cached_scan'):setattr(n,name,MethodType(env[name],n))
     def result(key,stamp=10.2,epoch=0):

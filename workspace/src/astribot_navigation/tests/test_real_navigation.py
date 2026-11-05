@@ -8,7 +8,7 @@ import numpy as np
 import yaml
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'scripts'),str(ROOT/'towergo_real')]
-from real_navigation.core import Lease,Drive,speed,limited,controller_parameters,validate_config
+from real_navigation.core import Lease,Drive,speed,limited,controller_parameters,validate_config,BROWSER_LEASE_SECONDS
 from real_navigation.geometry import Geometry,matrix,safe_pose
 
 
@@ -28,10 +28,11 @@ class NavigationTests(unittest.TestCase):
 
     def test_tracking_warning_records_errors_without_latching(self):
         b,d=self.drive();b.now=.01;d.tick(.01)
-        b.p[0]-=.12;b.now=.02
+        lag=self.config['max_position_error']+.02
+        b.p[0]-=lag;b.now=.02
         before=d.target[:];d.tick(.02)
         self.assertIsNone(d.fault);self.assertIn('偏差',d.warning)
-        self.assertAlmostEqual(d.tracking['position_error_m'],.12)
+        self.assertAlmostEqual(d.tracking['position_error_m'],lag)
         self.assertEqual(d.target,before);self.assertEqual(b.stops,0)
 
     def test_stationary_cancel_allows_only_explicit_new_task(self):
@@ -71,7 +72,11 @@ class NavigationTests(unittest.TestCase):
     def test_curvature_preserved(self):
         v,w=limited(.6,.3,.3)
         self.assertAlmostEqual(v/w,2)
-        self.assertAlmostEqual(w,.1)
+        self.assertAlmostEqual(v,.3)
+        # Yaw-rate cap still applies and preserves curvature.
+        v,w=limited(.3,.9,.3)
+        self.assertAlmostEqual(v/w,1/3)
+        self.assertAlmostEqual(w,.3)
 
     def test_reverse_rejected(self):
         with self.assertRaises(ValueError):limited(-.1,0,.3)
@@ -82,8 +87,10 @@ class NavigationTests(unittest.TestCase):
 
     def test_heartbeat_cannot_revive(self):
         lease=Lease();task=lease.begin('a'*32,0)
-        self.assertFalse(lease.heartbeat('a'*32,task,2.))
-        self.assertFalse(lease.valid(task,2.))
+        expired=BROWSER_LEASE_SECONDS
+        self.assertTrue(lease.valid(task,expired-.01))
+        self.assertFalse(lease.heartbeat('a'*32,task,expired))
+        self.assertFalse(lease.valid(task,expired))
 
     def test_cancel_invalidates_old_response(self):
         lease=Lease();old=lease.begin('a'*32,0);lease.stop();new=lease.begin('a'*32,.1)

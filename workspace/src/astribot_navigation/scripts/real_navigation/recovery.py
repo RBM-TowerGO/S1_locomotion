@@ -17,6 +17,9 @@ def backup_clearance(grid,pose,footprint,padding,distance,clouds):
         if not safe_pose(grid,p,footprint,padding):return False,'后退扫掠区域在地图上有障碍或未知格'
     poly=np.asarray(footprint,float)
     low=poly.min(axis=0)-padding;high=poly.max(axis=0)+padding;low[0]-=sweep
+    # Reversing moves away from the nose, so obstacles just ahead of the front
+    # edge cannot be hit; only keep padding at the sides and the rear sweep.
+    high[0]=poly[:,0].max()
     for points in clouds:
         points=np.asarray(points,float)
         if points.ndim!=2 or points.shape[1]!=3 or len(points)<20 or not np.isfinite(points).all():

@@ -33,11 +33,12 @@ def step(p,d,dt=.01,v=.15,w=.05):
 @pytest.mark.parametrize('tau',[.05,.7,2.])
 def test_ten_minute_slow_plant_lead_bounded(tau):
     p,d=setup(tau);maximum=0
+    lead,yaw=d.config['max_position_error'],d.config['max_yaw_error']
     for i in range(60000):
         v,w=step(p,d)
         maximum=max(maximum,d.tracking['position_error_m'])
-        assert d.tracking['position_error_m']<=.10000001
-        assert d.tracking['yaw_error_rad']<=.10000001
+        assert d.tracking['position_error_m']<=lead+1e-8
+        assert d.tracking['yaw_error_rad']<=yaw+1e-8
         assert d.fault is None
         if v:assert v/w==pytest.approx(3.)
     assert p.p[0]>5
@@ -47,7 +48,7 @@ def test_ten_minute_slow_plant_lead_bounded(tau):
 def test_blocked_plant_then_release_no_backlog_burst():
     p,d=setup();p.frozen=True
     for _ in range(2000):step(p,d)
-    assert d.target[0]<=.1 and d.fault is None and p.stops==0
+    assert d.target[0]<=d.config['max_position_error']+1e-8 and d.fault is None and p.stops==0
     p.frozen=False
     previous=d.target[:]
     for _ in range(2000):
