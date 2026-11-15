@@ -1,0 +1,6 @@
+{
+  "source": "/home/astribot/TowerGO/S1_locomotion/workspace/data/maps/web_sim_manual_20261021_v4/map.yaml",
+  "source_image_sha256": "3178e6d6d0aa3069fe97f551a6cbbbbcfb366f0806c375730b1db51e805ff92a",
+  "changed_cells": 6314,
+  "inflation_radius": 0.2
+}

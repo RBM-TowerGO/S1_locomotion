@@ -1,0 +1,19 @@
+{
+  "occupied_components": 1099,
+  "removed_components": 75,
+  "removed_cells": 95,
+  "max_component_cells": 3,
+  "required_free_neighborhood_fraction": 0.85,
+  "neighborhood_cells": 7,
+  "minimum_distance_to_large_obstacles_m": 0.15,
+  "source_yaml": "/home/astribot/TowerGO/S1_locomotion/workspace/data/mapping/mapping_20261020_201100_e23e0b/navigation_20261020_205139_531a50/map.yaml",
+  "source_yaml_sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb",
+  "source_image_sha256": "19282c6225e8550d21e4b4e221d44248eead05d7fb54c377a07f908f73e305c0",
+  "simulation_only": true,
+  "unknown_cells_changed": 0,
+  "original_occupied_cells": 30864,
+  "original_free_cells": 266297,
+  "cleaned_occupied_cells": 30769,
+  "cleaned_free_cells": 266392,
+  "note": "Small isolated obstacles are treated as noise for simulation; original recordings/maps are preserved."
+}

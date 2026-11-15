@@ -1,0 +1,48 @@
+# OS metadata
+.DS_Store
+._*
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Generated ROS recordings, maps and logs in experiment reports
+/workspace/data/reports/**/*.mcap
+/workspace/data/reports/**/*.db3
+/workspace/data/reports/**/*.posegraph
+/workspace/data/reports/**/*.data
+/workspace/data/reports/**/*.pgm
+/workspace/data/reports/**/*.log
+
+# Downloaded dependency cache
+/workspace/data/cache/
+
+# Unified collection artifacts (also protect user-selected output directories)
+*.mcap
+**/sensor_bag/
+**/raw_bag/
+**/lio_bag/
+**/vlm_export_*/
+
+# Independent source snapshot: local artifacts stay outside Git.
+*.pem
+*.key
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+install/
+log/
+*.log
+*.bin
+*.original-link
+*.before_user_confirmation.*
+/workspace/data/mapping/
+/workspace/data/reports/
+*.db3
+*.safetensors
+*.pt
+*.pth
+*.ckpt

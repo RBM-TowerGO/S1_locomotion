@@ -1,0 +1,21 @@
+{
+  "source": "/home/astribot/TowerGO/S1_locomotion/workspace/data/maps/manual_edit_20261024_214452_51b577/map.yaml",
+  "source_image_sha256": "c3cf0e8e87949e1d5222a57fa43ca237bd21c598ecefb9ba8bfabd5a97191d91",
+  "changed_cells": 1,
+  "cleared_unknown_pixels": [
+    {
+      "pixel": [
+        357,
+        658
+      ],
+      "world": [
+        -14.12,
+        18.27
+      ],
+      "old": 205,
+      "new": 254
+    }
+  ],
+  "reason": "Isolated unknown pixel in free corridor blocked full-footprint clearance (2026-11-05 navigation failure)",
+  "created": "2026-11-05T20:59:14"
+}

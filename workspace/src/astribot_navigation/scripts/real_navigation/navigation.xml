@@ -1,0 +1,17 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <!-- Keep following the current valid path while the next plan is computed.
+         A planning/control failure still terminates safely; no blind Wait loop. -->
+    <PipelineSequence name="NavigateWithConcurrentReplanning">
+      <RateController hz="1.0">
+        <!-- Forward arcs first; in-place turns only when no arc path exists. -->
+        <Fallback name="ArcThenInPlaceTurn">
+          <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+          <ComputePathToPose goal="{goal}" path="{path}" planner_id="InPlaceTurn"
+                             server_name="/towergo/nav/inplace/compute_path_to_pose"/>
+        </Fallback>
+      </RateController>
+      <FollowPath path="{path}" controller_id="FollowPath" goal_checker_id="goal_checker"/>
+    </PipelineSequence>
+  </BehaviorTree>
+</root>

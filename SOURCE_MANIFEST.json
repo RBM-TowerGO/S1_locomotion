@@ -1,0 +1,1906 @@
+{
+  "source_commit": "6a2c56ff1521748f5ab2de4d2f38e7d8c816d75b",
+  "source_directory": "S1_locomotion/",
+  "entries": [
+    {
+      "path": ".gitignore",
+      "bytes": 837,
+      "sha256": "f2f354ed82f90477372b6518ffec85bf3abccf894d70f47832db44b57a928845"
+    },
+    {
+      "path": "HANDOFF.md",
+      "bytes": 40552,
+      "sha256": "d116df97adb66d19fa486a592853c1132f663eb272005b5329d922c08839e6b3"
+    },
+    {
+      "path": "docs/operate/nav.md",
+      "bytes": 1034,
+      "sha256": "1c71a01c8d095d22c8eb61649ba7f1a200a26e7389926b81f82812872c6aced5"
+    },
+    {
+      "path": "docs/plans/keyboard_slam/README.md",
+      "bytes": 6823,
+      "sha256": "9c4d44f1c4456fe50aa2881a04d4ee74a74438d38d71fb88218fe6d8716be977"
+    },
+    {
+      "path": "docs/plans/keyboard_slam/acceptance-checklist.md",
+      "bytes": 10798,
+      "sha256": "c5c13111098d0fd6d5378a11f95daad3de48cc70e4b657c486a789796bda3718"
+    },
+    {
+      "path": "docs/plans/keyboard_slam/implementation-plan.md",
+      "bytes": 6360,
+      "sha256": "d9617e6ac6d4ac07f5461e76f29ed12b3e0ea30f2c5d53dfa7673f335a24f9b2"
+    },
+    {
+      "path": "docs/plans/vlm_navigation/README.md",
+      "bytes": 5355,
+      "sha256": "02165ae2f67789ae5bb71cef60caff0b4bb733d59af6904bdbe0b3eef56d9f9e"
+    },
+    {
+      "path": "docs/plans/vlm_navigation/acceptance-checklist.md",
+      "bytes": 6602,
+      "sha256": "5f335958298a4991b8eefc6c24492722a3731aa517ab0ad5f10963a79990a54d"
+    },
+    {
+      "path": "docs/plans/vlm_navigation/architecture.md",
+      "bytes": 7871,
+      "sha256": "6213247173b3587b510a75ed74161038437490363b6230cb49196bcbefa1a4f8"
+    },
+    {
+      "path": "docs/plans/vlm_navigation/implementation-plan.md",
+      "bytes": 9763,
+      "sha256": "8404a2dcc57ee5b20a9be8934d2072752bdf7e57d5662e4ade948a73327a2e24"
+    },
+    {
+      "path": "docs/plans/vlm_navigation/taskmemory.md",
+      "bytes": 30481,
+      "sha256": "73e7a7e02153a3eba88b1ed76e14e3826e627fddef7b1043d498d8575c90400a"
+    },
+    {
+      "path": "docs/plans/vlm_navigation/tasks.md",
+      "bytes": 5774,
+      "sha256": "b26e24cbd6252251bc0d78c111a830ed41dc138b76c4874ceab4dd53f58660a2"
+    },
+    {
+      "path": "runtime_ws/build_python/em.py",
+      "bytes": 114371,
+      "sha256": "0d03eb2b54a207061dcf3bb892b2b734d20008d91564637158fb784d0b7e6513"
+    },
+    {
+      "path": "runtime_ws/build_python/empy-3.3.4.dist-info/INSTALLER",
+      "bytes": 4,
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    {
+      "path": "runtime_ws/build_python/empy-3.3.4.dist-info/METADATA",
+      "bytes": 1188,
+      "sha256": "fb41462dfc35c9d7e94f23b8676a7f27f9d447cd163ae335fa965f310cf60385"
+    },
+    {
+      "path": "runtime_ws/build_python/empy-3.3.4.dist-info/RECORD",
+      "bytes": 558,
+      "sha256": "d474326ceb4417c4b080c9182f13220e0c1ba4b49aee6e758113be210d339bcf"
+    },
+    {
+      "path": "runtime_ws/build_python/empy-3.3.4.dist-info/REQUESTED",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "runtime_ws/build_python/empy-3.3.4.dist-info/WHEEL",
+      "bytes": 91,
+      "sha256": "61532836a2b3111b7ec23519c09df7c41180c27165fb872a6d8913b566b88ad1"
+    },
+    {
+      "path": "runtime_ws/build_python/empy-3.3.4.dist-info/top_level.txt",
+      "bytes": 3,
+      "sha256": "964bbaf162703657e787eb4455197c8b35c18940c75980b0285619fe9b8acec8"
+    },
+    {
+      "path": "runtime_ws/dependency-versions.txt",
+      "bytes": 102258,
+      "sha256": "215bfb4d68f004aa738a14db737773bdb70882e913f154f9f8b2dff882b0fb50"
+    },
+    {
+      "path": "runtime_ws/source_versions.json",
+      "bytes": 339,
+      "sha256": "dc1700540686b6f91d267c6b7b412d3aa5783433bb4dce44c7f0745a3adc5b4b"
+    },
+    {
+      "path": "vlm_navigation/.gitignore",
+      "bytes": 179,
+      "sha256": "df061903eba659db6ea29026a750bcc80c43d64f51dcfd989c13cf8ecfe8be3f"
+    },
+    {
+      "path": "vlm_navigation/README.md",
+      "bytes": 9195,
+      "sha256": "94d59cc554a45b4cebd2150ccfc3765ff213b0bb824fc410db98d22a3382da07"
+    },
+    {
+      "path": "vlm_navigation/activate.sh",
+      "bytes": 156,
+      "sha256": "7c9e8e4456a251600506cdb510cba9b54258703cb7d29191e68c51f087778460"
+    },
+    {
+      "path": "vlm_navigation/assets/samples/red_A.png",
+      "bytes": 1455,
+      "sha256": "977089fb491f75e53e7a5b6dd2395c92ca19620b1dd46d1837778c6348507172"
+    },
+    {
+      "path": "vlm_navigation/assets/samples/red_B.png",
+      "bytes": 1455,
+      "sha256": "02b5f83e5422e11c44dbc37637238cde0b2699515203bab068b6035ec4df4cf4"
+    },
+    {
+      "path": "vlm_navigation/configs/assets-manifest.json",
+      "bytes": 6133,
+      "sha256": "2576f3c20c6f9239c623221d488b399cf1fe71f8ddeb2b86a786d75add7ee67b"
+    },
+    {
+      "path": "vlm_navigation/configs/conda-explicit.txt",
+      "bytes": 2284,
+      "sha256": "e1b56419ba028f5e0a7e20dc313b6c1039b0447e11a023da34b148e1fe4a492c"
+    },
+    {
+      "path": "vlm_navigation/configs/constraints.txt",
+      "bytes": 87,
+      "sha256": "8cddb3e49dcebe3d90fc299559d7d45ffb02a41a06b3c79c108525966e1e54bf"
+    },
+    {
+      "path": "vlm_navigation/configs/cusparselt-upstream.json",
+      "bytes": 1431,
+      "sha256": "628bffe7ca3537530c7c650d45474685cf1fda45629b570a04ec95289f8617a2"
+    },
+    {
+      "path": "vlm_navigation/configs/inference.json",
+      "bytes": 391,
+      "sha256": "7f37e3033d2e0178a18fc6e63c49f32a9efc6c9f2c788315cf521a15761e7fbc"
+    },
+    {
+      "path": "vlm_navigation/configs/model-upstream.json",
+      "bytes": 23637,
+      "sha256": "8abdb559b31f5197b21bd98ac70a7779afd7a77dab04391ac638ae694d0bc303"
+    },
+    {
+      "path": "vlm_navigation/configs/modelscope-upstream.json",
+      "bytes": 8337,
+      "sha256": "65f68ce84da576703f02fec4f9c6bc122e8b25ad233d175783aaabd93aa3dae4"
+    },
+    {
+      "path": "vlm_navigation/configs/pip-freeze.txt",
+      "bytes": 1214,
+      "sha256": "e3c3a64380d17ec9d74f4df96d2145db7edbb939569175aa8f4aa954d4d19cc0"
+    },
+    {
+      "path": "vlm_navigation/configs/requirements.lock.txt",
+      "bytes": 887,
+      "sha256": "067758d7603910fc06e499e6021f7dec6e24b994b84c8cb5f936f47a0c3d386e"
+    },
+    {
+      "path": "vlm_navigation/configs/smoke-script-sha256.txt",
+      "bytes": 93,
+      "sha256": "f024769b48c8a74a7b22b95a207232db0494a1e2a6c8626465e95e7cbb8f71a4"
+    },
+    {
+      "path": "vlm_navigation/configs/torchvision-build.json",
+      "bytes": 638,
+      "sha256": "b49ff93e84846d5f72308b7115b38208d83d1ba010a1eb9e471e2e5aefeec770"
+    },
+    {
+      "path": "vlm_navigation/environment.yml",
+      "bytes": 234,
+      "sha256": "9ddb7e1215b558dff419828d00be0908bc198174dd6b70e5170361bbaf2b4872"
+    },
+    {
+      "path": "vlm_navigation/reports/cuda-check.json",
+      "bytes": 175,
+      "sha256": "269c53c42c576d51204f2daa7505ea41750a6dda0994fd9b75a99bd829175cec"
+    },
+    {
+      "path": "vlm_navigation/reports/deployment.md",
+      "bytes": 2948,
+      "sha256": "710bba52bcb21649599c35cb1db33688043c08f686bacb8c7d0843312517b0c7"
+    },
+    {
+      "path": "vlm_navigation/reports/environment-check.json",
+      "bytes": 724,
+      "sha256": "3fdc207e33f55e44fc7da654ba9067c0e62bc2e3685f1ddf3106cf81563a8a99"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/baseline.md",
+      "bytes": 6284,
+      "sha256": "cc370dc18f4ff1632ccde2fe5e979ab7c276e12383da95d5a383c45f5746c05f"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/environment-check.json",
+      "bytes": 724,
+      "sha256": "3fdc207e33f55e44fc7da654ba9067c0e62bc2e3685f1ddf3106cf81563a8a99"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/hot-resources.jsonl",
+      "bytes": 731954,
+      "sha256": "127f12586c79b0da0fc1ce75adfe449860503225d48c031d8262d4330da8b6d6"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/report.json",
+      "bytes": 141441,
+      "sha256": "49e1a85000fbb5f8b1abdd3f78dc93cc2066404be23fc2e8422faccdfd5f1ba0"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/requests.jsonl",
+      "bytes": 82677,
+      "sha256": "de30690b0b5aa8fdf049e41463e265cbf6691656440866ecca7f0416a0aec940"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/smoke-inference.json",
+      "bytes": 2501,
+      "sha256": "25563e27a49010bc7954d16d8e99c1999efdca29fb741b985018d7b86dd972cc"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/startup-1-resources.jsonl",
+      "bytes": 55541,
+      "sha256": "b6f7f3af2d67b0ea1b152547f76c16e0dbaa6855369507c6d179fff8028eea19"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/startup-2-resources.jsonl",
+      "bytes": 56107,
+      "sha256": "608c89ac04b03d8d94ff20d712547a11a26d68fabceed1e4d51af0b453a26f58"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/startup-3-resources.jsonl",
+      "bytes": 56843,
+      "sha256": "509d4731cbd221ddf9ee5be35b2d5216a6ddb628b1dc56049f311e7a870e88a3"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/timeout-failure.json",
+      "bytes": 114,
+      "sha256": "bc2b4432f1a3a6b6c300d4a9d18fa6ef57eced6275d1821f853ecf8847d3f93e"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-20261010T134757.059795Z/timeout-fixture-resources.jsonl",
+      "bytes": 1443,
+      "sha256": "3e4940dda031a8cb776d3e2ff0d1eb938f4fc610873db609a8c6e6f50fe0084e"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-prechange-20261010-214632/check_environment.py",
+      "bytes": 1973,
+      "sha256": "f4f5224658113901fcd5994ca9393e2a001854cabba7ced4f736743a237f2487"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-prechange-20261010-214632/smoke-script-sha256.txt",
+      "bytes": 93,
+      "sha256": "2844865732dc92dd1700c8fec1651e1acd820ddaf862ca3d4d42ca04c5a70468"
+    },
+    {
+      "path": "vlm_navigation/reports/p1-prechange-20261010-214632/smoke_inference.py",
+      "bytes": 5093,
+      "sha256": "8095dfab507f5c9e3c4fa5f1a62249742f5ba891b3fb24c33bce6c4928c649ea"
+    },
+    {
+      "path": "vlm_navigation/reports/p2-sdk-20261010T144355.753087Z/sdk-probe.json",
+      "bytes": 58741,
+      "sha256": "2262eef97ec5939e23729fd6be76ecbb90824c4b24f11cc303da0bffc4bba717"
+    },
+    {
+      "path": "vlm_navigation/reports/p2-sdk-20261010T144531.746622Z/inventory-evidence.json",
+      "bytes": 2469,
+      "sha256": "d74d80bfda7a1bcf9b258b3f719e90c89786339e392b8c64e0d55e1c5a09edd2"
+    },
+    {
+      "path": "vlm_navigation/reports/p2-sdk-20261010T144531.746622Z/post-state.json",
+      "bytes": 375,
+      "sha256": "34a1b4625658ef7aced83c32bae42cd1aa7144dcf28d201aa0027826f45f4261"
+    },
+    {
+      "path": "vlm_navigation/reports/p2-sdk-20261010T144531.746622Z/scripts-manifest.json",
+      "bytes": 520,
+      "sha256": "138e95cf97be21055898a02844decb3db92b9ff6729e0bc34f9b13d0f13dd858"
+    },
+    {
+      "path": "vlm_navigation/reports/p2-sdk-20261010T144531.746622Z/sdk-probe.json",
+      "bytes": 64696,
+      "sha256": "38824faed8b3b6e46500ffff654a3d273d9c353515c16eed328b9bbda7be750e"
+    },
+    {
+      "path": "vlm_navigation/reports/p2-sdk-20261010T144531.746622Z/sensor-sdk-audit.md",
+      "bytes": 10333,
+      "sha256": "e41be5f876fa697f07c568dd80591e430a51975aaafc13979738f9cf36def4ea"
+    },
+    {
+      "path": "vlm_navigation/reports/smoke-inference-format-failure.json",
+      "bytes": 1899,
+      "sha256": "70a846a2fc0f25396817c6f5a25b1a117e00ff1a62a02b152502d6f288b87d53"
+    },
+    {
+      "path": "vlm_navigation/reports/smoke-inference.json",
+      "bytes": 1847,
+      "sha256": "57e06d8e1d42f87ab0178460cfff842b11013e0fc0463452a047a51e950e7a3e"
+    },
+    {
+      "path": "vlm_navigation/scripts/benchmark_inference.py",
+      "bytes": 14063,
+      "sha256": "103059ba7a189a75d55f9c3df80cfed9b807dc01184cd83f8fd52e137970a5b4"
+    },
+    {
+      "path": "vlm_navigation/scripts/benchmark_worker.py",
+      "bytes": 926,
+      "sha256": "f2c15621da44606d91b16981eadd4349220d7eb113839a0c45f6b6350280cbbc"
+    },
+    {
+      "path": "vlm_navigation/scripts/build_torchvision.sh",
+      "bytes": 633,
+      "sha256": "591fe73ce7930f532591f4cfc81c8b78b81209f04a2e41bda22df814bcd46826"
+    },
+    {
+      "path": "vlm_navigation/scripts/capture_observations.py",
+      "bytes": 5529,
+      "sha256": "f2cd7b77af0755e98db3cec3822a1aee38d8f1d95816114a8e19d2c08386af69"
+    },
+    {
+      "path": "vlm_navigation/scripts/capture_observations.sh",
+      "bytes": 394,
+      "sha256": "e1231f6a1366e42ac14a01aaeea61e82078fd65b6d7bb51db8595f0cb798c5bc"
+    },
+    {
+      "path": "vlm_navigation/scripts/check_environment.py",
+      "bytes": 2383,
+      "sha256": "8dffef9a2f684aaac5cefb6435ad2724e2a180c4c579483d741108ca49c4d222"
+    },
+    {
+      "path": "vlm_navigation/scripts/download_assets.py",
+      "bytes": 2747,
+      "sha256": "ae4bec2277b8199cb05af7454f1fce5e4b5dfef23417579993354acac194ac68"
+    },
+    {
+      "path": "vlm_navigation/scripts/download_model_ranges.py",
+      "bytes": 2806,
+      "sha256": "5b0a0504a22fc5515bc22f4be0da31976bf7024e420e36818e11df43dd483bde"
+    },
+    {
+      "path": "vlm_navigation/scripts/inference_core.py",
+      "bytes": 7299,
+      "sha256": "6b509a4429b1b1fbbf8315a47763e40488da1f50643ccb2b1030dfd663979e47"
+    },
+    {
+      "path": "vlm_navigation/scripts/inspect_observations.py",
+      "bytes": 4720,
+      "sha256": "6d1effdff826882fe7b8a6b544a0a80f8624bbc6bb98e365ae6d2a27dda5b693"
+    },
+    {
+      "path": "vlm_navigation/scripts/probe_sensor_sdk.py",
+      "bytes": 9206,
+      "sha256": "4259159df3e24b85a6ce2f03d7e29a803098cd4886f20453e98790099ccb3ae1"
+    },
+    {
+      "path": "vlm_navigation/scripts/probe_sensor_sdk.sh",
+      "bytes": 293,
+      "sha256": "a3de4e77a9a18f54729738783bc807dff9c2f8179d654590b3e97c9e5d16deb3"
+    },
+    {
+      "path": "vlm_navigation/scripts/smoke_inference.py",
+      "bytes": 1607,
+      "sha256": "21235f3dfb43012e10b2566bc41eb0e201d409d0c510902ce2d36c53368df310"
+    },
+    {
+      "path": "vlm_navigation/scripts/test_inference_contract.py",
+      "bytes": 1775,
+      "sha256": "a8f23319a3bbc92a6e570f1d4b4191cb956f1af8a2cd7b602d7bdcc0e49168cb"
+    },
+    {
+      "path": "workspace/.gitignore",
+      "bytes": 121,
+      "sha256": "54565d61219728f2398dbf6e2b31ef2d7819b9770c8e84e45ee266ac6e4caeb9"
+    },
+    {
+      "path": "workspace/README.md",
+      "bytes": 912,
+      "sha256": "5d5cfb3d5e774a11255db905d2cbe76bf148598c302cac1033d5a7ecac4b4733"
+    },
+    {
+      "path": "workspace/data/bags/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/data/glass/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214450_1ef233/edit.json",
+      "bytes": 255,
+      "sha256": "f34e2e9998fdf0c840c06abbe4fff87676afb525b5eb2cf488b27f9af9bfb065"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214450_1ef233/map.pgm",
+      "bytes": 1290256,
+      "sha256": "c3cf0e8e87949e1d5222a57fa43ca237bd21c598ecefb9ba8bfabd5a97191d91"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214450_1ef233/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214450_1ef233/navigation.yaml",
+      "bytes": 892,
+      "sha256": "03607490942b949611e15cfbb79847adf5c3926c350d24ffd333e1a1c6959b02"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214452_51b577/edit.json",
+      "bytes": 255,
+      "sha256": "f34e2e9998fdf0c840c06abbe4fff87676afb525b5eb2cf488b27f9af9bfb065"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214452_51b577/map.pgm",
+      "bytes": 1290256,
+      "sha256": "c3cf0e8e87949e1d5222a57fa43ca237bd21c598ecefb9ba8bfabd5a97191d91"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214452_51b577/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261024_214452_51b577/navigation.yaml",
+      "bytes": 892,
+      "sha256": "03607490942b949611e15cfbb79847adf5c3926c350d24ffd333e1a1c6959b02"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261105_speckle_fill/edit.json",
+      "bytes": 19182,
+      "sha256": "fa1b93c93a914c85f54b2b7bfdbf18fb7c5dfe574d77cb2bf6b6b956c6802c0f"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261105_speckle_fill/map.pgm",
+      "bytes": 1290256,
+      "sha256": "c3b2182ef376d03a86d90466fae8787c9576ba7b8947ed68fce254ff46ddb51a"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261105_speckle_fill/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261105_unknown_pixel_fix/edit.json",
+      "bytes": 578,
+      "sha256": "267071af71f05e62216881aee2fb0d26cdbfbddfecc31acb1a4032b9e4b94397"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261105_unknown_pixel_fix/map.pgm",
+      "bytes": 1290256,
+      "sha256": "83ee986049c6eac3690105d49e16ddb12327a5295bf776514b162ace2cec237a"
+    },
+    {
+      "path": "workspace/data/maps/manual_edit_20261105_unknown_pixel_fix/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_clean_20261021_v1/cleanup.json",
+      "bytes": 882,
+      "sha256": "cfb325dd86c9af6735a58efa56ba984af2e96c68b7e226069c4bab91cdc7b929"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_clean_20261021_v1/map.pgm",
+      "bytes": 1290256,
+      "sha256": "33cac2c31b670ef11ff9970de67cb1ff3a3d3d0c268a6f74f8c0a0a3ac6679c0"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_clean_20261021_v1/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_clean_20261021_v1/preview.png",
+      "bytes": 52528,
+      "sha256": "d3c8b729203366c4db4fb15ccebec239ec6828b65a049e56218558374a43bbfc"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v2/comparison.png",
+      "bytes": 20449,
+      "sha256": "b7cc16e33761d5ed250205ed5c129fea0fbc1aad5a2c93ae3c5eeda7fe128901"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v2/manual_edits.json",
+      "bytes": 821,
+      "sha256": "fe83bcd7d08281373773f8e35ab6b232e526e35fd7944185c12dfcec573243e0"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v2/map.pgm",
+      "bytes": 1290256,
+      "sha256": "27d4568e9bc7387e3c7277fb7e9e5887f05526887ec277dcb5ecb9da3ce93147"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v2/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v2/marked_regions.png",
+      "bytes": 14029,
+      "sha256": "e91f635f1ebcdadc3b263f0124bc03df8e6338f27facd1f024332eff67814f3f"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v2/preview.png",
+      "bytes": 52369,
+      "sha256": "90ff8faf34925d1e62f183bb9eac7687aee148e74c0ed98cc8d945514799c36c"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v3/comparison.png",
+      "bytes": 22595,
+      "sha256": "452aedd2eaaae4d100e87dd8999a085ee61b5c535450a244081a5c82b62ba633"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v3/manual_edits.json",
+      "bytes": 978,
+      "sha256": "b1cc549a927b3b5497a0784c7fd9ada25c8f38a245c6c9ac6a90dcbfee03b6f1"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v3/map.pgm",
+      "bytes": 1290256,
+      "sha256": "73cf9b438fe7b2376591d68a7e9c3619b75dba9df7551a242a82caac95e88b03"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v3/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v3/marked_regions.png",
+      "bytes": 15547,
+      "sha256": "53fd98ea3300bd8f06f520bc94b94ba742b05ec6c70caf0e9d89f94eb2ec0885"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v3/preview.png",
+      "bytes": 52211,
+      "sha256": "031e91a35ed3f47bbf482646c19f71115df1636394ee696ddde5224e49546573"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v4/comparison.png",
+      "bytes": 1246,
+      "sha256": "6ae76c10f490060f50897f6cd1436e9708eca5da3468af78a47513209a1c427b"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v4/manual_edits.json",
+      "bytes": 846,
+      "sha256": "382cc17f8ebe54941f6ee22695dc9288bf7a8cb9e1710e9a207679e74fd14f05"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v4/map.pgm",
+      "bytes": 1290256,
+      "sha256": "3178e6d6d0aa3069fe97f551a6cbbbbcfb366f0806c375730b1db51e805ff92a"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v4/map.yaml",
+      "bytes": 127,
+      "sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v4/marked_regions.png",
+      "bytes": 1000,
+      "sha256": "0edf808a0cdd3fddd4f07fe94c574b4073503d152a6a99760c05164e29d1b04f"
+    },
+    {
+      "path": "workspace/data/maps/web_sim_manual_20261021_v4/preview.png",
+      "bytes": 52197,
+      "sha256": "3eee238c1e0fadb110c40ff315a2ee1a03daf813b6b2fc8c1ec4675df5bd6e7c"
+    },
+    {
+      "path": "workspace/data/trajectories/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/dual_livox_ws/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/navigation_ws/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/offline_ws/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/.dockerignore",
+      "bytes": 42,
+      "sha256": "47d8d58701464ee4b7d2c6a55a9a35b524b4ccde2eb30b7090f0e4a2d7d4ece3"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/.gitignore",
+      "bytes": 38,
+      "sha256": "599e8d09a18b6bac6f70ed12bf96f67e49c4d992ee2601bc173d92fbcb64b11d"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/README.md",
+      "bytes": 6226,
+      "sha256": "a9791512f1b79f5467f973d2ea4a3af792cf221d84d97c8889b4a006c39e4b77"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/astribot_nav_api/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/astribot_nav_api/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/astribot_nav_api/navigator.py",
+      "bytes": 2915,
+      "sha256": "534a4dc20bd18aeb8777e646175639e9e57233dc38409d6756140585596be297"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/package.xml",
+      "bytes": 520,
+      "sha256": "6d796973c8290e677dac29e95dc6a2138dd2a534b7ba0ab44c6f267bc6b6cd4c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/resource/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/resource/astribot_nav_api",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/setup.cfg",
+      "bytes": 101,
+      "sha256": "6b9c5ff5716c41cde889f2c0490b7b411d5f45cc21b5e672587da4181edba4c1"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/setup.py",
+      "bytes": 367,
+      "sha256": "554ca1c6435699a2f7a0e7e2fd53e0de1e300fe8d262f415c16da8f24f616c8a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_api/test/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/astribot_nav_bridge/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/astribot_nav_bridge/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/astribot_nav_bridge/bag_tools.py",
+      "bytes": 2741,
+      "sha256": "7345064c2f7276d26ba3ffd48d73325e78fc278f0e89f73ee6b70c23e1bcd8c1"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/astribot_nav_bridge/command_guard.py",
+      "bytes": 2919,
+      "sha256": "5ab9dc0758810a4144da914a7b1e4e60e213882101a05fe89f09030a2022d2ad"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/astribot_nav_bridge/contracts.py",
+      "bytes": 1222,
+      "sha256": "8515898231aa628207eec6700b4e5219053184aa1f296edea2c8c3dd314a8201"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/astribot_nav_bridge/inspect_state_bag.py",
+      "bytes": 1325,
+      "sha256": "c881182204eb0c5597daf4a874a3d39c2da8e0e767da644cc8b46f80117d1eba"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/package.xml",
+      "bytes": 645,
+      "sha256": "539d37fa61a86a798a7302861dee748219c265794841a971f5a33814ce649bc4"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/resource/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/resource/astribot_nav_bridge",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/setup.cfg",
+      "bytes": 107,
+      "sha256": "0245d39e1d179d351dfcd17fdf18a8785c661ce9066b64ca5538b5326cf3eccc"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/setup.py",
+      "bytes": 506,
+      "sha256": "8d8ddfaf6830eaf80ce25e56fa5740d102d884b5640d8806a2519562b21c3a4c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bridge/test/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/CMakeLists.txt",
+      "bytes": 2253,
+      "sha256": "be9d255d561e3bfa5d3eea73ecd9481ddc19f1aee40f66e5d31db35779cd269d"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/config/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/config/nav2.yaml",
+      "bytes": 6122,
+      "sha256": "27f3e67f298758d8a0f74219152972b3f0cb0ac8b9aa2539c6836fe6b77fc482"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/config/navigation.xml",
+      "bytes": 401,
+      "sha256": "75303262184e757875d592a644c56034a344330ff646ba762ac057fd0c6c4197"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/config/navigation_through.xml",
+      "bytes": 409,
+      "sha256": "8b6d77d3a3eb493658a7ca1fb7363e5042f5ee51e6b5ef5f672322fcb97fbd33"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/config/slam.yaml",
+      "bytes": 1725,
+      "sha256": "d84648a2fe6717f1660ae1e57f9716a48cc5b0dd9ee6ca36d254690c8c2f14fa"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/config/web_controller.yaml",
+      "bytes": 2378,
+      "sha256": "ef3909dd436a2f709842a4cbdd519a76048a8e922ec05b509f74b4d97a83b1c2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/config/web_navigation.xml",
+      "bytes": 647,
+      "sha256": "6f9a4df7bda9f07ad6b1b26db800c75068018f4b9b0cc72f38c85efcb6e98d05"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/launch/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/launch/offline_mapping.launch.py",
+      "bytes": 719,
+      "sha256": "aa02fcd4e91933d0495d409d3e87de1d2c9ec31334603242f810d6e2ce21aa91"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/launch/offline_navigation.launch.py",
+      "bytes": 4331,
+      "sha256": "654c54fcf1dbfb33746017f044350bef4b9b640c5b79fb3df46ba048c87db8c3"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/launch/replay_mapping.launch.py",
+      "bytes": 1617,
+      "sha256": "97eed54575d9a2c91856e302f626a77c6008cac376116d678e5bc2a811f9727c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/launch/simulation.launch.py",
+      "bytes": 1463,
+      "sha256": "8c28d80f2645cccb0a39a4c9338742148a6f37f84034fc7140fc26e44d6df50f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/launch/web_navigation.launch.py",
+      "bytes": 3192,
+      "sha256": "8d674085bbaca7bbdb8d128ef5d9be1264576d710ab23cee5e904c7c71da319a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/motion_plugins.xml",
+      "bytes": 254,
+      "sha256": "dcadd3c27ad3c8d1579fc8dd12d9e85b6df8b480b3f45ebb41d784f595993b9c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/package.xml",
+      "bytes": 1475,
+      "sha256": "3c08e39a6c6ad17dd748573f54faa151a026d4deef1d80c90e3e477df29908ba"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/planner_plugins.xml",
+      "bytes": 307,
+      "sha256": "6c1bffb5692a19988d967300c18af41dc4d71ec5eba322c75fa6d7cc497fb937"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/rviz/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/exact_goal_lattice.cpp",
+      "bytes": 6449,
+      "sha256": "0b3557451be2b2de5c5e471f18e898dbd2874245f3c1a490d1f101f6fd01fbaf"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/lio_planar.hpp",
+      "bytes": 997,
+      "sha256": "afecadc74595b6b0199b0b25841f03fe87ec1eb622f19513d1c0ffed57d43aca"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/lio_planar_motion_model.cpp",
+      "bytes": 1053,
+      "sha256": "130f0dbd5a8801e9ec899c320da3f6c9f6088e8cea44c23a15739c7e1e0b4787"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/route_collision.hpp",
+      "bytes": 1522,
+      "sha256": "f92ccd74dc852c96a8dc58911353626d602f0432e4588e5b08794b7b66fb53fb"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/stop_turn.hpp",
+      "bytes": 5715,
+      "sha256": "13a910cc6032eb397ee598394c16af45386de76c163a08e99017b78bd9ac66b4"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/stop_turn_controller.cpp",
+      "bytes": 7711,
+      "sha256": "c017fa4cf65ed2e000d91e1978f92c7db247db5918921a7aa96565336527099e"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/stop_turn_geometry_test.cpp",
+      "bytes": 1296,
+      "sha256": "3df5d4fe5fe53b95f205213165f0b9575f7713a4757209ec8202cda856d3ad99"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/stop_turn_planner.cpp",
+      "bytes": 5169,
+      "sha256": "aa9557bc059499f64a68794e0e4d12edfec7bfaf6d1b232f38f6a6d1d051c7c6"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/src/straight_route.hpp",
+      "bytes": 1270,
+      "sha256": "a8193278641706e1c9be3105fc8ee34cbcbafc99084a115503afe10c17fb6354"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/stop_turn_plugins.xml",
+      "bytes": 689,
+      "sha256": "495e0d0954d0d49fcbdff6468355cd1d28eed1e06b017fd6ef7a201408c1ee8c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_bringup/urdf/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sensors/CMakeLists.txt",
+      "bytes": 568,
+      "sha256": "5bcba5b9fbab9fce852619aa01b5d845b058f98445e044cddd3aa1d72baca522"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sensors/include/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sensors/package.xml",
+      "bytes": 556,
+      "sha256": "4c5890703f7af50542372c4f44a63aa917cb90e765696121e34bc1592d6b41d1"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sensors/src/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sensors/src/scan_processor.cpp",
+      "bytes": 5818,
+      "sha256": "aef12ea02a2c2439a635abb1e6d0d14e6e73c8bcbdb5aa0f96ee73e444b9e795"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sensors/test/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/astribot_nav_sim/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/astribot_nav_sim/experiment.py",
+      "bytes": 16782,
+      "sha256": "d7ed547a0c88d5bc6721189fbd2eb7fb8d30df22830844dbca10b5ea367cb246"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/astribot_nav_sim/grid_world.py",
+      "bytes": 6234,
+      "sha256": "85c64b048af6b9a4ef13e5c011f5fbc7af8c72e9be3329dd5049592162656413"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/astribot_nav_sim/map_audit.py",
+      "bytes": 3115,
+      "sha256": "c85324e0d326c8d9051b343a362a96e1f1334f2a77a650761e8474a545ad180f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/astribot_nav_sim/map_cleanup.py",
+      "bytes": 1474,
+      "sha256": "188a062662c0a3725cd87e6c8ba7512eb40cdcf93bcf010bd07a4d790cd2ba02"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/astribot_nav_sim/simulator.py",
+      "bytes": 9555,
+      "sha256": "937150ee6b9e78a947899a85bd18762fe092560b08320534931614b09cf43adc"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/astribot_nav_sim/world.py",
+      "bytes": 2638,
+      "sha256": "efdf1d55c4d2a27697a7a8b9fe7bdc011d776995ec22c0503cf71874fda323b6"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/package.xml",
+      "bytes": 896,
+      "sha256": "4439b62002cc789931534aef3e8f09ddbe7c2642e310aff671a00493be272614"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/resource/astribot_nav_sim",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/setup.cfg",
+      "bytes": 101,
+      "sha256": "6d6b30818fa86a59cbfa18c63d61f64793cb67d1eb99ee02636a5d9163e3d1ba"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/astribot_nav_sim/setup.py",
+      "bytes": 417,
+      "sha256": "11f10975a8e61f7dd0ea21eb9a83f4c95ad12105ed238df32f86673331734b26"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/dependencies.repos",
+      "bytes": 17,
+      "sha256": "ef3089528a8a54da0a5c3409bb142f3208a34253ec22bbaf91ff2e498ae59315"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docker/Dockerfile",
+      "bytes": 2150,
+      "sha256": "38d509de20339d33bd5b1ae67edfc95f01c98472bc8ad27521daeb12a06f6645"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docker/Dockerfile.real",
+      "bytes": 1085,
+      "sha256": "6a3f9e011ec282ccda4d70a962a0eb2da9b275f3a94fd58d27d317ac8d9f3357"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docker/entrypoint.sh",
+      "bytes": 184,
+      "sha256": "721c0e8266cf1ec6636f5c09b7f9f481264a0912052538ee72dec74c36378890"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docker/patch_slam_grid.py",
+      "bytes": 1097,
+      "sha256": "03690cde414f1eafd337503a5360b218d9bd9be1d5bab2da303cc14c64c6b324"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docker/real_entrypoint.sh",
+      "bytes": 192,
+      "sha256": "eaf6fda403fd9e760d6b4d3f159a4943772b69917a3697dd713ec538208e3f86"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docker/vendor/slam-toolbox-2.6.10.tar.gz",
+      "bytes": 53719478,
+      "sha256": "5cc31b72e89903ee1b2c44699e93a800e4e425f3b9eee17d7c0c20e12a66f8af"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/AMCL_CONFIDENCE_FIX.md",
+      "bytes": 6910,
+      "sha256": "e6526837bcdb111902f4063884d65510ee1fd9c7fd7422f9856be866b9aef3c0"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/AMCL_TURN_COVARIANCE_DIAGNOSIS.md",
+      "bytes": 3916,
+      "sha256": "ca821b95da7de68842307932d13e3055160b7d6a9283133b9cbde700588477a9"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/COLLECTION.md",
+      "bytes": 7968,
+      "sha256": "dc88528474dd17b2fc8a0224f89f365553456b90a531897f79550e14a9f9b324"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/CONTINUOUS_NAVIGATION.md",
+      "bytes": 6716,
+      "sha256": "fdec81f9ac64137ded7343581b27f7a2cd64ff2626eac18bfdff83270de368e1"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/DATA_PAUSE.md",
+      "bytes": 2246,
+      "sha256": "f2cc3064bc13c9f522b5fe27faa546b4fcf09b1041a8205f88d2fdd04e07ea35"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/DRIVE_GOVERNOR.md",
+      "bytes": 4604,
+      "sha256": "45c8e4860ed33fd9403f0af6354e5550df68d5f79a5284608a5ab414be4188da"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/DUAL_LIDAR.md",
+      "bytes": 11194,
+      "sha256": "91d6c247d2ff2dfebae33abaa4961de9ded64a610695c495a3b838b6b173ed7a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/KEYBOARD_MAPPING.md",
+      "bytes": 9270,
+      "sha256": "873c4d25ae6b7412228410bbea513c374877e39d7848568a0489262aa742b589"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/LOCALIZATION_DRIFT_REPORT.md",
+      "bytes": 6528,
+      "sha256": "866636c06b23eb6fe79f2a3dcabb4391ac3e552208ce97f5666fdd73d9f85996"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/MAP_EDITOR.md",
+      "bytes": 1062,
+      "sha256": "e98ccd014057a25fb0c217aee1fd473857589d1fd75f0cf4f5a62d640100a8c0"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/REAL_WEB_NAVIGATION.md",
+      "bytes": 8417,
+      "sha256": "29d9aa5f00fcadf0c32ab9923135cbf0b9aab3a59a8053625fb4cddb876a823f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/RECOVERY_BACKUP.md",
+      "bytes": 3313,
+      "sha256": "3f18c6cb5c58907e753703e7271502289f7b2363b87dc809b6735ae046f24f84"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/S1_CONTROL.md",
+      "bytes": 6156,
+      "sha256": "3f79419f9cb1fbe9090b8dec15b64f38ae69fbdc3da61262ed3e55ea88da99fc"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/SCAN_PUBLISH_RETRY.md",
+      "bytes": 1736,
+      "sha256": "3d5965fc03a6212dd8d2f3cd7bf61138ce18b7744d3d2ea7418fc8ad1e9d2d9a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/SIM_REAL_COLLISION_COMPARISON.md",
+      "bytes": 4598,
+      "sha256": "19453e5aee3c3e14ec8013435ea9a5593bcea531db1a9e04ab0db3fea1750115"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/SLICE_NAVIGATION.md",
+      "bytes": 8200,
+      "sha256": "4aabd5a12ecd5ef30cd1eb6cdcbb1bd6562f7e1e1c0fa802cf2de8bd4432e147"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/SSH_TELEOP.md",
+      "bytes": 25703,
+      "sha256": "502ff8337c7c06c99142cca1c1139d95b68367557caabb02429da81ef56f8995"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/STOP_TURN_NAVIGATION.md",
+      "bytes": 6710,
+      "sha256": "6616f3694a362a74c7fd9f23614c792e4260ad6113e2de43d18178f324495a5a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/STRAIGHT_ROUTE.md",
+      "bytes": 1309,
+      "sha256": "39946edc51aa41d8b3d3392ce99e36ede5ad5126a8fd4802f8ff12be92b5863c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/WEB_NAVIGATION.md",
+      "bytes": 10518,
+      "sha256": "52048bdda76b674480a84eda592248e24f068ad2131155e4e8870709eaa5f7e2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/experiments.md",
+      "bytes": 2168,
+      "sha256": "fa372297484120ac08c6d743dd07a6b548227cf90cb9e7a2a57f585dc7360113"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/interfaces.md",
+      "bytes": 1926,
+      "sha256": "c1248846aaa5e15fe841963deef3e3b60740eb6fbcfb7dae8a7003b07f6c673a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/mapping.md",
+      "bytes": 475,
+      "sha256": "d7e83acd5b44c418a9938e6c2198544542c7cc8839fd3bee5bc15acfe5a1068a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/navigation.md",
+      "bytes": 3807,
+      "sha256": "f70b37fa547c253baa3e3610d9e80635fd56b61196e1fe05bdb4c4e9499e9f0f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/sdk-audit.md",
+      "bytes": 1402,
+      "sha256": "306b30e248e6d0da7d67d926b6546ac3f6a8f8d848c6906aad8779d38c340297"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/setup.md",
+      "bytes": 458,
+      "sha256": "936cca5e179cc3055374e6e1e2c399a36ba18eadf41a7afe844e100d3fdcbf3a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/teleop_mapping/README.md",
+      "bytes": 17201,
+      "sha256": "e284ffbb723c7e7ff96aaef1a42a01d4293639061b2a5ee15556000d949b1790"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/docs/teleop_mapping/teleop-mapping-design.md",
+      "bytes": 9492,
+      "sha256": "93461136d462722775794b0efcae08c7bc390a676c079377ef9078e8d8ed0168"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/audit_maps.py",
+      "bytes": 98,
+      "sha256": "0b4f91ab7ddcf48d122ff899e9c095b16e6c839058619c7443f668a6dd422a53"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/build_dual_livox.sh",
+      "bytes": 716,
+      "sha256": "7bbdd8292fe8e7e58c06d5b38c6d5f64ad164e00b9aeb687125d36d18726b0a7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/build_real.sh",
+      "bytes": 1431,
+      "sha256": "c58a2e5ba6263c9936bb619a2228d431d667cf7d57cbf102b46b73a78cbc7bbb"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/build_static_map.py",
+      "bytes": 12455,
+      "sha256": "f943cb55b24dc329be28ca2be11ab50a20522ad9ccf59f1fa074f5e5bc279ce3"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/check_replay.py",
+      "bytes": 2904,
+      "sha256": "6a690fe089fb3909226cf39d6d3fdd81228303c37b831d550e8599c8997d3083"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/clear_sim_regions.py",
+      "bytes": 5863,
+      "sha256": "402e6cd6e950fc6727afccc93529f7b73db08b7d361918dd77ac7293596b5607"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/collect_sensors.py",
+      "bytes": 6952,
+      "sha256": "6105f2c3e66c713593feeba0219dbc73541c6bf9a44c4be22179851eff0f0a9b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/collect_static_lidar.py",
+      "bytes": 5404,
+      "sha256": "9e8a48991626da6860966d0e5dc45f93b60c91ad58b9b0d0436e20d9a2f15fd2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/collection_common.py",
+      "bytes": 4837,
+      "sha256": "071cd3d127e488fffaba5bf954e95ad51aa884c18c4cfd07a285cfdbeb549a8f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/container.sh",
+      "bytes": 1585,
+      "sha256": "50627258255bdd28f6be709df9e39303783d180be9d2583300f56160aaefebac"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/dual_lidar_contract.py",
+      "bytes": 1644,
+      "sha256": "9503168515d82c425cd92a9b374f2a62f5ac498e58894d4eb26e47302e4c713c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/export_collection.py",
+      "bytes": 9997,
+      "sha256": "b3adc84ece36a1656fd9192980a0e6a32b8daaad414f8ffa486d001967e5222c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/fetch_real_dependencies.py",
+      "bytes": 3362,
+      "sha256": "a16b18edbc835261d6657e558b451ac8a1c1a3b96bbabcfa6feb9bd6413bfb40"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/fetch_vendor.py",
+      "bytes": 945,
+      "sha256": "a7be2366ad87bd3794db55483545148837332d49a4de636b29a484a1eb5377c7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/inspect_hardware_readonly.py",
+      "bytes": 6211,
+      "sha256": "5c592588637102fc8f65de6549401bc9ba2302940bb6e7f94ce965daf498387b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/install_real_prerequisites.sh",
+      "bytes": 717,
+      "sha256": "253bf59e6a9180c97b1218fc939de7248fb1cfd98d8a384fca7e5aeb8c3af5f7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/localization_ab.py",
+      "bytes": 8014,
+      "sha256": "f52d5eb43ad9eeac8e1b1c6cc8e5d718bd866d443e63a89fe361fea5427cd6c2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/localization_motion_ab.py",
+      "bytes": 8337,
+      "sha256": "7fc174a057cc1e5bfff2c7e07898755dfe1f11eeb27443fe6c779dbfa9a97139"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/localization_motion_replay.py",
+      "bytes": 8951,
+      "sha256": "ca8da01006fed3469d40a535054d7cb8d60e24afb96185f47e74e42f2aae03d2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/localization_recording_audit.py",
+      "bytes": 5858,
+      "sha256": "be0edc979d9083ac996bc076ccb0a671bbab33da1c3523e58bba1dd41ebf4115"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/localization_recovery_probe.py",
+      "bytes": 3460,
+      "sha256": "8b153d48659ad3c19e70d0904ea63e5853ca6534e198498ac689222d5afb6ff8"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/mapping_finalize.py",
+      "bytes": 7348,
+      "sha256": "e6fc827b3a1b1ef668a3fd6a37949a0e5ff296c0f38382e761e08aeafffb5345"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/mapping_slice.py",
+      "bytes": 14031,
+      "sha256": "a027b97af1ff57d9c038be93a1ca73eac8127bbdae01c77ccad7c0d35cf14dff"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/mapping_slice_finalize.py",
+      "bytes": 7621,
+      "sha256": "fc51a0885ec31dcac2936d9a8058cfdb6c1dd1fc2e858f08e9f055e94e6b7650"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/mapping_slice_node.py",
+      "bytes": 3712,
+      "sha256": "1a199144ed6fd5c1bcd935b683b924fc6bef272652a8782a633547e5cc0fea11"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/mapping_support.py",
+      "bytes": 11163,
+      "sha256": "2c5039a6912fe3c0cc99e11b25f705e87d3bdac6c79abd686b0f2d2072bbe2d7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/nav_web.html",
+      "bytes": 13238,
+      "sha256": "f9cfc71813a9f5ebb31c1d94b08343982a3245f2b603c41968a798c99c6a9751"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/nav_web.py",
+      "bytes": 22800,
+      "sha256": "268522762e49e95c00cd1b692fcd2e373b14f2b164743a9b34f53faa6642cdf4"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/prepare_sim_map.py",
+      "bytes": 2295,
+      "sha256": "53cac753b242c48c0c811c4a857d02be8be54d9c877994f697266d40d4fbab69"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_container.sh",
+      "bytes": 1410,
+      "sha256": "b3eb0f685bcde4dd80e92cb9e2354f6e07629cd4b3cf2929985a4ab020f4fd20"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_env.sh",
+      "bytes": 747,
+      "sha256": "e8747481ed8d5cbc151f62b2cc5972ffab7010e4be18ce63903df7d838fb4a0d"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/__init__.py",
+      "bytes": 75,
+      "sha256": "6cc76673ad1dbe386c9c8879c094583c470a19288e709a4e113b43f3280ce2f6"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/chassis_interface.py",
+      "bytes": 1839,
+      "sha256": "95d33601e0c7a081cc3739d7f909b6e71c095d396bdd76278d125a9b53dfd2c2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/confidence.py",
+      "bytes": 3932,
+      "sha256": "70fe8fe1570c4ada6c081da9b4355aee69c7a0c468358ab7357dbc12d5b35134"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/core.py",
+      "bytes": 17507,
+      "sha256": "99081c6cdbb9ad87e11f9be646c69763c522b60c8a23aff2ac4947043f121bbf"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/executor.py",
+      "bytes": 9106,
+      "sha256": "d03314acc27a652acc9a658c78bdd38982c6eada3ac1eb728ab1edde1a434151"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/geometry.py",
+      "bytes": 9495,
+      "sha256": "3da5aa264727b67e4a5520a19072f946f4459f0c301a8b09c2118c94df4dab54"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/index.html",
+      "bytes": 19518,
+      "sha256": "06613323df20dd06632715e4f3427873520364dcf3603c740cf637f72b6d7a61"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/launch.py",
+      "bytes": 2189,
+      "sha256": "6e4cd670ac314eeecb9deb29ca8f9f77c9a39c38ae689c8e0e69b1d8574437e7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/localization.py",
+      "bytes": 15862,
+      "sha256": "6c3fc17c55d85a96d36b2b0ebedcf646811af945c497bd143c83071d0dadd973"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/localization_runtime.py",
+      "bytes": 15951,
+      "sha256": "af9bf686c257dc1a201f60fd43850184d0cea7d1f7700335a36611c64277b915"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/map_editor.html",
+      "bytes": 6684,
+      "sha256": "d122a0cb3f2a25a0ed19a51c501f2f82374c277ea5b46a9f010711e56ca492a0"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/map_editor.py",
+      "bytes": 6483,
+      "sha256": "5c3ba7ce4f57b8af0f6c58da4c9043fffcda3ab7af0349cbe24ade6845981eeb"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/navigation.xml",
+      "bytes": 894,
+      "sha256": "22b327e9d97b51426f44d49b093a2cffe9c1b7cd50a5154a2ebe1dac1c82ad18"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/navigation.yaml",
+      "bytes": 1691,
+      "sha256": "1f41d1f542d35bb93825f4947e7526c889fdce9daa3952c6ce5f1f7c4036a0a4"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/pipeline.py",
+      "bytes": 6559,
+      "sha256": "86b43c7ac5b8a9bab66813da831354917628dd54bf57ab9393f125425eb9256b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/recovery.py",
+      "bytes": 3121,
+      "sha256": "a25522b03e7c86b36162867e1e01b505c1c51e9359d2b2fb392bd9801d0a95de"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/sensors.py",
+      "bytes": 17450,
+      "sha256": "2da54e5473dbe70b6356950d4f2c66cb7ad973b4a1c5a67f632e5031e545dc77"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/session.py",
+      "bytes": 19884,
+      "sha256": "cd497d4b9fe7fa3e0946494342fd4075948ff874f139676973a23ff9849e8997"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/stability.py",
+      "bytes": 1241,
+      "sha256": "f5378bcd0c4ee2fb2fd74904b759a80cd2e3d0d7647f7dce24a6807d1791a5f7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/vendor_stop.py",
+      "bytes": 472,
+      "sha256": "d26324d1482d31e247b011c0b2590db9ce8ac5c3a639123c78e78f18bf1eb308"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/real_navigation/web.py",
+      "bytes": 47175,
+      "sha256": "66dfce1c1d27fe675ed55dcd42f4a0105cbf7b6b308dc238b574b11062323676"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/run_suite.py",
+      "bytes": 2571,
+      "sha256": "e38283141e988d18ff642df0ca779f93c008ae83458c19c9e540cb47a9c13018"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/s1_control.py",
+      "bytes": 15478,
+      "sha256": "a3e83e70f18580872aa40d45cdf54e10e914dc905672933f800670aa14b62b3b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/stop_turn_probe.py",
+      "bytes": 11682,
+      "sha256": "ef990f73b54d478ba8b38deb6d5848b97da2faa0ab9bedbe7e9e19c88e32a9d1"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/summarize.py",
+      "bytes": 3794,
+      "sha256": "52a1d66cfbb703338ddffad09cb9f710b11b1c838ad7a784c44c3192ed257f99"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/test_chassis_exit.py",
+      "bytes": 2839,
+      "sha256": "ce5c894687a92f98557124c7c4925cf532339834f565d07b6166345f87ef8846"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/test_keyboard_tty.py",
+      "bytes": 2297,
+      "sha256": "3bd0e593dda37c0fdeb98cec814f38d97f440156e91c1e3e898140a3315da831"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/test_public_api.py",
+      "bytes": 1147,
+      "sha256": "1a2e90419b6d9fe52f60cfb2d950665743e661582e5962985ea4f98372ae8c5f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/test_real_mapping_ros.py",
+      "bytes": 5712,
+      "sha256": "a931fa58e34a7bfc31ae3d2ec4fd0705d2715299b86ef807d7c2b0d8109b0627"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/test_real_ros.py",
+      "bytes": 6924,
+      "sha256": "33dc8ad3f3a05d02669c2ee1dff6d3135e511703cf4d2244fd804a9767a97f51"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/test_static_lio.py",
+      "bytes": 5408,
+      "sha256": "7d0eb6fbf7eac34d6b4f334e8c2bdfb06ddcc88157103de722b86ee00651432c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/test_unit.sh",
+      "bytes": 304,
+      "sha256": "d2b18c42072aee38eccdaa30c30617b34a0e0b082431d6273e960486b429320c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg-export.sh",
+      "bytes": 216,
+      "sha256": "ccbcb588f60a5e56bab10f8b6e6796120fdef4d44febacad7bc03366cca72c00"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg-mapping.sh",
+      "bytes": 1446,
+      "sha256": "74e678a7858221c0cbe8f233039bdf835a365f9e96ec714b9aa88237ed7035b2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg-navigation.sh",
+      "bytes": 1426,
+      "sha256": "b5d7874c667fe4d37f2a56bf6ffd2684dcfc87553b3a5cbf52e0f28260db4705"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg-teleop.sh",
+      "bytes": 1334,
+      "sha256": "046ea3a7d44d1ae6f7212d32a22899515fb5cc8265043cafeb19553fa5e8acfa"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg_mapping.py",
+      "bytes": 38428,
+      "sha256": "99f20c83ce7a6675239d7a169f922e99adc66966606efededab75276afb733f9"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg_pose.py",
+      "bytes": 7262,
+      "sha256": "318fb6bd02b384cadffc89e8f7334623e325aa460b6e242f096d9ce9a000a92a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg_teleop.py",
+      "bytes": 29640,
+      "sha256": "44a7d528931e42c44c2e1dcde3af4fbff244e5b87d2a67bdad3d1ceec5306e3e"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/tg_torso.py",
+      "bytes": 7450,
+      "sha256": "406aaceef90ef0d802cea7c41ed8615ddb952d81a6f75adb190cb9c4b23dbd52"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/validate_real_navigation.py",
+      "bytes": 4192,
+      "sha256": "0ce970c0d07401bd0855183b1d2a64dde569aaf742ef8d171b66b6987e299d77"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/validate_web_route.py",
+      "bytes": 4586,
+      "sha256": "c32c53d693732fdcc907993faadf8357048fd84abec44bbe43f1feb4c156c9a8"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/scripts/verify_dual_coordinates.py",
+      "bytes": 4921,
+      "sha256": "7e4461350be54d6c254aa88c3333803c32e43da4e22a3de9d1c68f5ed4c6e6c5"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_amcl_confidence.py",
+      "bytes": 2759,
+      "sha256": "c231ec6d5854b5f71f17e724b07c0874f8709b34c1b813c59b894599d3c83616"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_amcl_runtime.py",
+      "bytes": 5375,
+      "sha256": "00deaffb4d0eaaff05a35512ab6c090f567477f5c7b9b5c7b0e5839df5bdf12f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_body_scan.py",
+      "bytes": 7391,
+      "sha256": "0c3cfdca74598a624277e684279eb2d6a86b3805de6d549cf1ed1da5f6f7837b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_collection.py",
+      "bytes": 7987,
+      "sha256": "0bf1fcff3d872f89a2a227aba60d612b315f4c5312b0cd86b31afca1e1a65344"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_contracts.py",
+      "bytes": 1209,
+      "sha256": "2ccf373e8eb77e7e77c8a1e1b395b800e0bd6cb61b1945c113489f2c8ac8e954"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_data_pause.py",
+      "bytes": 6556,
+      "sha256": "011cf025250f87fa2f1ddb1ad2cdcbaea0b27c2fd1015d2f75a9761cb4f0b379"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_drive_governor.py",
+      "bytes": 6092,
+      "sha256": "80f6b1affb7327354668e9da36b3d8b34da74436260a7f50a3247eec952381a2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_dual_adapter_ros.py",
+      "bytes": 7023,
+      "sha256": "4625fc19c4b012f461b05393383775777ef5b98cb03e5c1ed8b74a15d886eef7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_dual_mapping.py",
+      "bytes": 6991,
+      "sha256": "0245c6bf3decff592f2a8e233494d212d943cece2564bfbef79da290bfd9559c"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_grid_world.py",
+      "bytes": 3234,
+      "sha256": "f5ecc802b214e9380b95e7e608fde094e07a744e7e61bf5301d446b1b59318f3"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_lio_motion_model.py",
+      "bytes": 1929,
+      "sha256": "b8d15a5c54be6de1b014229b6cb0032ac199c11f6c28e4c1b187c1d3edd04642"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_localization_quality.py",
+      "bytes": 8130,
+      "sha256": "45eee6000fc4251f78c1fcbf58e342a12158879789b4c6073531a4e3953962ea"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_manual_map.py",
+      "bytes": 2445,
+      "sha256": "0c1fa4e11149a6ab017d2f7a010aafcb06ae3a7bde062c3ed39accb9a67ad3a6"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_map_cleanup.py",
+      "bytes": 1177,
+      "sha256": "97ef30040d61d8e1378f2740e29a67ddbd707cb92444895e591b72dd25d52bec"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_map_editor.py",
+      "bytes": 2057,
+      "sha256": "b192607a99d298013fe268f85a25b213172755503fc8371241e39cfb217f6443"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_map_editor_ui.cjs",
+      "bytes": 1518,
+      "sha256": "05b82ef49cb48623594c83c28ed6af1e57eccaafb832904ce58d8166335fb14f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_mapping.py",
+      "bytes": 12715,
+      "sha256": "48069e0b696c207db0f82f98c5505374780e48078bb0297fe24797f1cba17373"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_mapping_slice.py",
+      "bytes": 9060,
+      "sha256": "79eb86dd67353713e816dec5fe237e93be9183d64fd1bbd1fc607fef116a4f9a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_navigation_chassis_interface.py",
+      "bytes": 8022,
+      "sha256": "00ceb7296baa0ff21d20b2fe7916e8aed616df7d3ec34cc90d35495a600be17e"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_navigation_heartbeat.py",
+      "bytes": 2891,
+      "sha256": "17e988c41ecb1176da85268e51de4ca7a737de0035e77dd30fa67482cef575d7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_navigation_pipeline.py",
+      "bytes": 13319,
+      "sha256": "2ad6fe819a6220beebc6b626f9a16b74ccba2d78ea2e239495a885a4d44c8f31"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_navigation_recovery.py",
+      "bytes": 16232,
+      "sha256": "62abeadef48b114127f42092fdbf40b514af18655484fb908d62fee7064e1819"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_real_control.py",
+      "bytes": 6138,
+      "sha256": "dad5fe1b3886b634922cd89a1605cd56451288d0980155daf57d64ad130b9a3d"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_real_geometry.py",
+      "bytes": 2329,
+      "sha256": "b50660afb5c2702f04bc08ebf28bf13a2d9f0c24736753a517869b3c5099612b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_real_navigation.py",
+      "bytes": 11403,
+      "sha256": "776b81cfcf351f038c6be6d31004d801eede3fa45d9256180ddff07436007e6b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_real_session.py",
+      "bytes": 1028,
+      "sha256": "8348c2ca06a06874a35d4566bc7fd91fc567f30f8ebf4c1ba9caa246aa96dc2e"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_real_viewer.py",
+      "bytes": 1058,
+      "sha256": "a5a636b7642b34252726decbb40b0cc37c59f80ccdef396f6d4fed00f49fa9d0"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_retreat_recovery.py",
+      "bytes": 6709,
+      "sha256": "7c9e09e772e72c065045817161621b9db1c66d7aa9d1d90f1aa8eea9059288db"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_ros_guard.py",
+      "bytes": 2538,
+      "sha256": "a83b8bb6b3fa9c3ba921d0ca6e3ef9fdcb3a35c5a7c89410f9a4c15945658f23"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_ros_scan.py",
+      "bytes": 3234,
+      "sha256": "6fc75b3e65c175ce00772eb14b8aaf1997c3a86c2f4e9a12d2e669f8876fad96"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_s1_control.py",
+      "bytes": 7748,
+      "sha256": "ce2dc7171f6671a5e339dff58a78905bc628757f53ba553be8df209036374278"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_scan_publish_retry.py",
+      "bytes": 5404,
+      "sha256": "f56b21d8ef74d47a70539006a0939429a1b75c38d35cbda682f3831e33ed64e3"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_stability.py",
+      "bytes": 7694,
+      "sha256": "656939476607c1a2b30523e2c482ac72cf0b0eaa0be9942d777f1e69c03dff67"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_static_map_navigation.py",
+      "bytes": 6248,
+      "sha256": "e418e6144af5ba028ce339f3d683b6c7c8e57fe0cb01a9c6e2cdb4a9e056b4e3"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_stop_turn.py",
+      "bytes": 5454,
+      "sha256": "961d47efa808ca98fc308f9d31581614f7dd9cddf8db70fc93526475ef9471e9"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_straight_route.py",
+      "bytes": 1623,
+      "sha256": "0e6446bb8d0dec2129001f7b5763bf2b3a7a2f195eb9fc2fce4fa352ca9514e9"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_structure.py",
+      "bytes": 2685,
+      "sha256": "dd3547f28a10bd819d98ee8336af49c9ea88677dd5c3600d49f31eee417a8caa"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_tg_pose.py",
+      "bytes": 7241,
+      "sha256": "596cad07226cb208571e63bb4747cf7005fa11b0235db6674b84431771c58e5e"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_tg_teleop.py",
+      "bytes": 18826,
+      "sha256": "bc588fb1d86a1d5e19218db7646a8ad843a52900fbe1c160c5824a3ca577cb88"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_tg_torso.py",
+      "bytes": 16310,
+      "sha256": "5cb71d0ff61f845b6610e6cd517d00b8122ca43818d074badcece1d802333255"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_tg_torso_sdk.py",
+      "bytes": 9659,
+      "sha256": "cfe09936066fbb222735cc09582fe629abc55619e672850a554ac5597df53c36"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_web_navigation.py",
+      "bytes": 5351,
+      "sha256": "52948771a73780e10069ea2c0dbc0420945a9d57b34e4fa5ef96219d6e415f4f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/test_world.py",
+      "bytes": 1156,
+      "sha256": "3021686d61543295a23ac3fb8e05d073be0bc497d81aa9e8eaae0ead7101a67b"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/validate_slice_fault.py",
+      "bytes": 2539,
+      "sha256": "156a19574df0918eee2fe12b2161787dc8baaacb2c238835f943f7c16a0aebf6"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/validate_slice_nav2.py",
+      "bytes": 3184,
+      "sha256": "f4c739c8a108999d5ed690e1de869649cd8e368ba51eb463328f2ccdca8c9407"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/tests/validate_slice_products.py",
+      "bytes": 2814,
+      "sha256": "3b53d3614fc7719e4baddb247ab49355e2827b91490f3abf532db243ea9c3ae4"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/CMakeLists.txt",
+      "bytes": 914,
+      "sha256": "032d1ba34fc6798156dd98a8a801087348a4497923fd50bf54bcbefb03c26a22"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/config/coordinate_verification.json",
+      "bytes": 952,
+      "sha256": "c22e279cf521d778556c541577c151acee1ef6de20cf0b80899ab0e642684fae"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/config/static_first.json",
+      "bytes": 3253,
+      "sha256": "78a51c040c78922e492cb289aed23a6c6a5ada00115f6a65d894613a5a2e7acb"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/config/static_second.json",
+      "bytes": 3250,
+      "sha256": "e944b970be5a1310eb202fafc05f2eea4a1fecce596464428577a5ddbed85d24"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/include/fusion.hpp",
+      "bytes": 4255,
+      "sha256": "44c6fcc53f323dc42297185ad5e8846a8acd7dd0a09b858f6f009369cfd46f89"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/package.xml",
+      "bytes": 526,
+      "sha256": "68a12619f8cc72b021f98567e4b84c7c411dcd25b1de2a79a707aef388ec6e83"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/src/dual_adapter.cpp",
+      "bytes": 10316,
+      "sha256": "d7d410c6a2d94905028fea7c81ef3e7e9981a698795e26680fe26e7c577bc232"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_dual_livox/tests/test_fusion.cpp",
+      "bytes": 5222,
+      "sha256": "45d886a4142e57db7a62516d6067445daf55c9a0761ce2705891eeba9dc00a69"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_livox_adapter/CMakeLists.txt",
+      "bytes": 611,
+      "sha256": "7c1c92909df23dc8f43b54bf8b7edeb1c2b1976aacd799c29ab61b67643c8137"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_livox_adapter/package.xml",
+      "bytes": 550,
+      "sha256": "8b5c2b83070af72be3971da97fbe9658be95b6bb0be1d5834144c3e6dbf4097e"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_livox_adapter/src/livox_adapter.cpp",
+      "bytes": 8248,
+      "sha256": "4e02d55e3a567870dda7afd83dc95665184b52144d3404ca95a7cfda8a12c8f7"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/config/calibration.unverified.yaml",
+      "bytes": 1188,
+      "sha256": "a8131fdaaad098a8453b7e9a49c830239cbf695a75b1b3b8734cd4dc7fe2ef7f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/config/calibration.vendor.yaml",
+      "bytes": 2120,
+      "sha256": "831091d490c08ba831ac33f15880dc0c915dffda69568d82297fc43b609021b5"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/config/hardware.unverified.yaml",
+      "bytes": 1037,
+      "sha256": "d955596fff36917226dc9f8e384a9954f9ec4acda13f0e9e368f5ef149984d16"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/config/slam_real.yaml",
+      "bytes": 1059,
+      "sha256": "eada802692dd22e549201329fe183c9f178a32277be229b6a8bbba9eaee57968"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/launch/real_mapping.launch.py",
+      "bytes": 4295,
+      "sha256": "9e01a3bb363c899168e11e26c16f33ac23a66cbafcec684b6bfa78a7c7b15054"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/package.xml",
+      "bytes": 1101,
+      "sha256": "ad183146975fbd41b9a5c39d3474304fcda5961ed35d36238efde1f9f79e9a15"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/resource/towergo_real",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/setup.cfg",
+      "bytes": 93,
+      "sha256": "9faf323cc7c17748f7214c3726f4666732d52944c5f15c291812dabe81606f03"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/setup.py",
+      "bytes": 934,
+      "sha256": "4d902d5acbd6f5fe3a27f0e870a616afb54f16b731450a0e266fd1fc462a3b38"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/__init__.py",
+      "bytes": 80,
+      "sha256": "dd34e90d603b0e7805a13504e2eff960b2fc8594e8683451d822b050406e086a"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/audit.py",
+      "bytes": 4057,
+      "sha256": "656b9776cdacb7a3f4485ea11d65cde51280936c862227c6d808009884ac5a95"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/chassis.py",
+      "bytes": 8722,
+      "sha256": "9499951456d36ec78e32571e46a553952a70a68454104c6700b592cc9c022d55"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/contracts.py",
+      "bytes": 5201,
+      "sha256": "9c9ac8e55ca1c858e4b2d8b5477947d48a1d62fd174fa949fbb64da58edfc8cf"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/control.py",
+      "bytes": 9344,
+      "sha256": "f255d7be605f818a553945fb16d2efa1dcf1770ce22ec23165a94b892ca9e0b8"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/geometry.py",
+      "bytes": 5241,
+      "sha256": "f413e455235ee80bec020d4e7d5ad3b6bf78203961eae01f43cc69d9c9ebca6f"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/keyboard.py",
+      "bytes": 2909,
+      "sha256": "ff2233c075190495c987e29f44c306b86a81c20ccba4d9082afb55217b2cbfc2"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/lio_adapter.py",
+      "bytes": 9112,
+      "sha256": "fd853eb319788dac36ee65c309e2a1ac759a3049b91c0b53b00b4e8e6f26893d"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/preflight.py",
+      "bytes": 1033,
+      "sha256": "691470ab09f13fe915c5c871b9d8605808a6093d871c1ec100d0831a1bc07e88"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/sdk_backend.py",
+      "bytes": 3608,
+      "sha256": "41c1d1f0e52756493e67ddcb1b6440015710a7d4817ab625fc82c8b0c7cb69fc"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/session.py",
+      "bytes": 17495,
+      "sha256": "ae8fb6ba5f94d7d4a0829add9ccc9c055383c6ceed42cb111020975593c6ea92"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/towergo_real/viewer.py",
+      "bytes": 6721,
+      "sha256": "be70f01e24bbdb0d91dc1fb11c45594e57b690f0fafe04fecf823dc954bc9b94"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/towergo_real/web/index.html",
+      "bytes": 6302,
+      "sha256": "68138f4bf569f2d4e87e6ea4da90ebba77a5da6a9ea778d42b35bad5e44bf799"
+    },
+    {
+      "path": "workspace/src/astribot_navigation/web/mapping.html",
+      "bytes": 11575,
+      "sha256": "8bacd2109e35970c20b96ec42a78dd84aee08bf744b45038e2ae06c9b5bb4aac"
+    }
+  ]
+}

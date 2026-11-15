@@ -1,0 +1,53 @@
+{
+  "source_yaml": "/home/astribot/TowerGO/S1_locomotion/workspace/data/maps/web_sim_manual_20261021_v2/map.yaml",
+  "source_image_sha256": "27d4568e9bc7387e3c7277fb7e9e5887f05526887ec277dcb5ecb9da3ce93147",
+  "simulation_only": true,
+  "authorization": "User confirmed empty locations and marked screenshot regions",
+  "image_rectangles": [
+    [
+      406,
+      595,
+      432,
+      622
+    ],
+    [
+      369,
+      626,
+      390,
+      648
+    ]
+  ],
+  "image_polygons": [
+    [
+      [
+        475,
+        528
+      ],
+      [
+        485,
+        529
+      ],
+      [
+        531,
+        466
+      ],
+      [
+        573,
+        398
+      ],
+      [
+        555,
+        396
+      ]
+    ]
+  ],
+  "cleared_occupied_cells": 151,
+  "cleared_components": 7,
+  "selection_rule": "complete components contained in selected rectangles; crossing walls preserved",
+  "polygon_fragments_cleared": true,
+  "per_region_cells": [
+    22,
+    4
+  ],
+  "unknown_cells_changed": 0
+}
