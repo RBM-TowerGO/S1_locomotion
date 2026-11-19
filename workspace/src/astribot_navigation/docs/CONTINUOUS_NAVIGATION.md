@@ -1,5 +1,7 @@
 # 真机导航
 
+从 Mac 启动真机导航、打开网页或直接调用 ROS，见 [S1B 底盘导航操作速查](../../../../docs/operate/nav.md)。
+
 ## 启动与 ROS 接口
 
 在 S1B 的 `workspace/src/astribot_navigation` 目录启动导航。已有地图或配置参数仍传给这个入口。

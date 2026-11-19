@@ -1,5 +1,7 @@
 # 导航
 
+从 Mac 启动真机导航、打开网页或直接调用 ROS，见 [S1B 底盘导航操作速查](../../../../docs/operate/nav.md)。
+
 使用 experiment navigation 加载地图，先验证AMCL初始化收敛，再通过标准NavigateToPose依次执行三个目标。默认NavFn+DWB，速度仅前进和转向。
 
 局部代价地图分别读取前后原始点云并保留观测原点。虚拟scan用于SLAM/AMCL，合成双雷达存在遮挡/自由空间近似，须由对照实验评估。
