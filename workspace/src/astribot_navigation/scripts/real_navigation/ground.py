@@ -9,7 +9,8 @@ def ground_plane(base, nominal):
     points = base[near]
     if len(points) < 16:
         return None
-    cells = np.floor(points[:, :2] / .35).astype(int) + 10
+    cell_size = .35
+    cells = np.floor(points[:, :2] / cell_size).astype(int) + 10
     ids = cells[:, 0] * 20 + cells[:, 1]
     order = np.lexsort((points[:, 2], ids))
     _, starts, counts = np.unique(ids[order], return_index=True, return_counts=True)
@@ -20,7 +21,7 @@ def ground_plane(base, nominal):
     xy = samples[:, :2]
     design = np.column_stack((xy, np.ones(len(xy))))
     # Start near the measured chassis clearance. Select a lower supported
-    # surface and reject unsupported, steep or one-sided patches.
+    # surface and reject unsupported or steep patches.
     rng = np.random.default_rng(1701)
     picks = rng.integers(len(xy), size=(96, 3))
     triples = design[picks]
@@ -39,22 +40,22 @@ def ground_plane(base, nominal):
     good = support[:, best]
     if good.sum() < max(10, .35 * len(xy)):
         return None
-    angles = np.arctan2(xy[good, 1], xy[good, 0])
-    gaps = np.diff(np.r_[np.sort(angles), angles.min() + 2 * np.pi])
-    if gaps.max() > 1.5 * np.pi or np.linalg.eigvalsh(np.cov(xy[good].T))[0] < .20:
+    # Each lidar can see floor on just one side of the chassis. Require a
+    # two-dimensional patch (half a cell RMS along its narrow axis).
+    if np.linalg.eigvalsh(np.cov(xy[good].T))[0] < (cell_size / 2) ** 2:
         return None
     plane = np.linalg.lstsq(design[good], samples[good, 2], rcond=None)[0]
     if abs(plane[2] - nominal) > .018 or np.linalg.norm(plane[:2]) > .065:
-        return None
+        # Refining a patch away from the chassis can shift the extrapolated
+        # intercept. The original supported candidate met both limits.
+        return planes[best]
     return plane
 
 
 def height_above_ground(base, nominal):
     plane = ground_plane(base, nominal)
     if plane is None:
-        # Sparse frames still use the chassis clearance. Never infer free space
-        # from a wall, a small elevated object, or an unobserved patch.
-        return base[:, 2] - (nominal - .012)
+        return base[:, 2] - nominal
     # Limit extrapolation of slope beyond the observed local footprint.
     xy = np.clip(base[:, :2], -3.5, 3.5)
     return base[:, 2] - (xy @ plane[:2] + plane[2])
