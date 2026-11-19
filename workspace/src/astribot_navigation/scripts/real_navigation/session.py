@@ -155,11 +155,10 @@ def start_live_sensors(node, replay, pump):
 
 
 def parser():
-    p=argparse.ArgumentParser(description='S1 真机网页导航，默认只观察，不加载 SDK')
+    p=argparse.ArgumentParser(description='S1 真机导航，默认只观察，不加载 SDK')
     p.add_argument('--map',default=str(WORKSPACE/'data/maps/manual_edit_20261105_speckle_fill/map.yaml'))
     p.add_argument('--config',default=str(HERE/'navigation.yaml'))
     p.add_argument('--mode',choices=['observe','hardware','mock'],default='observe')
-    p.add_argument('--port',type=int,default=8767)
     p.add_argument('--replay',help='原始双雷达/IMU bag；隔离 Domain 125，不加载 SDK')
     p.add_argument('--replay-rate',type=float,default=1.,help='隔离回放倍率（0.5–1）')
     p.add_argument('--duration',type=float,default=0,help='验证会话最长秒数；0 为持续运行')
@@ -186,7 +185,7 @@ def main():
     m=yaml.safe_load(mapfile.read_text());image=mapfile.parent/m['image']
     if abs(m['resolution']-.05)>1e-8:raise ValueError('当前 lattice 配置要求 0.05 m 地图')
     from ament_index_python.packages import get_package_prefix,get_package_share_directory
-    dependencies=['fast_lio','towergo_dual_livox','astribot_nav_bringup','nav2_amcl','nav2_controller']
+    dependencies=['fast_lio','towergo_dual_livox','astribot_nav_bringup','astribot_nav_interfaces','nav2_amcl','nav2_controller']
     for package in dependencies:get_package_prefix(package)
     if args.check:
         print(json.dumps(dict(mode=args.mode,map=str(mapfile),max_speed=config['max_speed'],dependencies=dependencies),ensure_ascii=False,indent=2));return
@@ -199,14 +198,14 @@ def main():
     import rclpy
     from rclpy.signals import SignalHandlerOptions
     from rclpy.executors import SingleThreadedExecutor
-    from .web import Web,server
+    from .supervisor import NavigationSupervisor
     run=Path(args.output_root)/('navigation_'+datetime.datetime.now().strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6])
     run.mkdir(parents=True)
     claim(session_lock,run)
     (run/'config.yaml').write_text(yaml.safe_dump(config));(run/'nav2.yaml').write_text(yaml.safe_dump(nav_params(config,mapfile,bool(args.replay))))
     report=dict(mode=args.mode,replay=args.replay,map=str(mapfile),map_sha256=digest(mapfile),image_sha256=digest(image),
                 config_sha256=digest(run/'config.yaml'),max_speed=config['max_speed'],started=time.time(),status='starting',processes={})
-    procs={};node=None;http=None;executor=None;interrupted=False
+    procs={};node=None;executor=None;interrupted=False
     def spawn(name,cmd):
         proc=OwnedProcess(name,cmd,log=run/(name+'.log'))
         procs[name]=proc;report['processes'][name]={'pid':proc.proc.pid,'command':cmd}
@@ -218,11 +217,10 @@ def main():
     rclpy.init(args=['--ros-args','-r','/tf:=/towergo/nav/tf','-r','/tf_static:=/towergo/nav/tf_static',
                       '-p','use_sim_time:='+str(bool(args.replay)).lower()],signal_handler_options=SignalHandlerOptions.NO)
     try:
-        node=Web(config,str(mapfile),args.mode,run)
+        node=NavigationSupervisor(config,str(mapfile),args.mode,run)
         # Keep the node attached: rclpy.spin_once(node) removes/re-adds it
         # on every callback and repeatedly rebuilds this large wait set.
         executor=SingleThreadedExecutor();executor.add_node(node)
-        http=server(node,args.port)  # Bind before starting any owned processes.
         # Discover existing publishers before reusing the keyboard SLAM sensor startup.
         deadline=time.monotonic()+2
         while time.monotonic()<deadline:executor.spin_once(timeout_sec=.05)
@@ -238,7 +236,7 @@ def main():
         report['sensor_startup']=start_live_sensors(
             node, bool(args.replay), lambda: executor.spin_once(timeout_sec=.05))
         # Device service success means requested, not that sensor data is ready.
-        # The existing live-data health checks determine readiness in the UI.
+        # The existing live-data health checks determine navigation readiness.
         topics=topic_names('/towergo/nav/lio')
         base=Path(get_package_share_directory('fast_lio'))/'config/mid360.yaml'
         lio_parameters=parameters(base,topics,bool(args.replay))
@@ -280,7 +278,7 @@ def main():
             report['diagnostics']=dict(status='recording',seconds=args.diagnostic_seconds,max_bytes=args.diagnostic_max_bytes)
         if args.replay:
             spawn('player',['ros2','bag','play',str(Path(args.replay).resolve()),'--clock','--rate',str(args.replay_rate),'--delay','2','--topics',*REQUIRED_RAW_TOPICS])
-        print('真机导航 '+args.mode+'：http://127.0.0.1:'+str(args.port)+'\n记录目录：'+str(run),flush=True)
+        print('真机导航 '+args.mode+' · ROS 服务 /towergo/nav/command\n记录目录：'+str(run),flush=True)
         report['status']='running';atomic_json(run/'session.json',report)
         diagnostic_check=0.;diagnostic_stopping=False
         start=time.monotonic();maxima={'front':0,'back':0,'scan':0};ready_seen=False
@@ -317,6 +315,7 @@ def main():
         report.update(status='failed',error=str(exc));raise
     finally:
         if node:
+            node.destroy_service(node.command_service)
             node.stop('会话结束')
             end=time.monotonic()+.3
             while rclpy.ok() and time.monotonic()<end:executor.spin_once(timeout_sec=.02)
@@ -326,7 +325,6 @@ def main():
             if name in procs:
                 try:procs[name].stop(timeout=8 if name=='executor' else 5)
                 except Exception as exc:report.setdefault('shutdown_errors',[]).append(str(exc))
-        if http:http.shutdown();http.server_close()
         if executor:executor.shutdown()
         if node:node.quality.close();node.sensors.close();node.log.close();node.destroy_node()
         rclpy.try_shutdown();report['ended']=time.time();atomic_json(run/'session.json',report)

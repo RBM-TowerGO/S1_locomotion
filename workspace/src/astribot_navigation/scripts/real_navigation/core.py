@@ -159,7 +159,7 @@ def validate_config(config, hardware=False):
 
 
 class Lease:
-    """Owner is per page, task IDs invalidate all late callbacks and heartbeats."""
+    """Owner identifies a client, task IDs invalidate all late callbacks and heartbeats."""
     def __init__(self):
         self.owner = None
         self.task = None
@@ -169,9 +169,9 @@ class Lease:
 
     def claim(self, owner, now):
         if not isinstance(owner, str) or not 16 <= len(owner) <= 128:
-            raise ValueError('Invalid browser session')
+            raise ValueError('客户端标识长度须为 16–128 个字符')
         if self.owner and self.owner != owner and (self.active or now < self.until):
-            raise ValueError('另一浏览器持有控制许可；当前页面只读')
+            raise ValueError('另一客户端持有控制许可')
         self.owner, self.until = owner, now + BROWSER_LEASE_SECONDS
 
     def begin(self, owner, now):

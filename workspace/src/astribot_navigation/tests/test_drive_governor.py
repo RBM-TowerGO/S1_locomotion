@@ -119,8 +119,8 @@ def test_command_timeout_cancels_and_does_not_revive():
 def test_web_cancels_lease_when_executor_canceled_task():
     import ast,json
     from types import SimpleNamespace
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=='self.lease.active')
     stopped=[]

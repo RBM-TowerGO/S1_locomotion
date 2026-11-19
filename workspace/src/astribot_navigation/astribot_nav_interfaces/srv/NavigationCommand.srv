@@ -1,0 +1,15 @@
+# localize / goal: map pose. nudge: displacement in the current base frame.
+# x, y in metres, yaw in radians, speed in m/s (goal and nudge).
+# stop requires only the operation.
+string operation
+string owner
+float64 x
+float64 y
+float64 yaw
+float64 speed
+---
+# Acceptance is submission to the supervisor. Follow task_state for completion.
+bool accepted
+string reason
+string task_id
+uint64 localization_id

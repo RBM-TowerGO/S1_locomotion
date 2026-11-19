@@ -61,8 +61,8 @@ def test_start_inside_enlarged_clearance_is_rejected_before_executor_prepare():
     import numpy as np
     from real_navigation.core import speed,controller_parameters,GOAL_XY,GOAL_YAW
     from real_navigation.geometry import safe_pose
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='begin')
     ns=dict(speed=speed,controller_parameters=controller_parameters,safe_pose=safe_pose,GOAL_XY=GOAL_XY,GOAL_YAW=GOAL_YAW)
     exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'begin','exec'),ns)

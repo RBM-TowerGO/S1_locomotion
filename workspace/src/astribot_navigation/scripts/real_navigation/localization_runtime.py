@@ -1,4 +1,4 @@
-"""ROS-side orchestration. Search/quality run off the Web control callback."""
+"""ROS-side orchestration. Search/quality run off the navigation callback."""
 from concurrent.futures import ThreadPoolExecutor
 import json
 import math
@@ -11,28 +11,28 @@ from .confidence import StaticReassessment
 
 
 class LocalizationRuntime:
-    def __init__(self, web):
-        self.web=web
-        self.matcher=MapMatcher(web.grid,web.sensors.geometry.base_lidar[:2,3])
+    def __init__(self, supervisor):
+        self.supervisor=supervisor
+        self.matcher=MapMatcher(supervisor.grid,supervisor.sensors.geometry.base_lidar[:2,3])
         self.monitor=QualityMonitor();self.recovery=Recovery()
-        self.expectation=UpdateExpectation(web.config.get('amcl_update_min_d',0.),web.config.get('amcl_update_min_a',0.))
+        self.expectation=UpdateExpectation(supervisor.config.get('amcl_update_min_d',0.),supervisor.config.get('amcl_update_min_a',0.))
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='localization-quality')
         self.future=None;self.search=None;self.generation=0;self.last_scan=None
         self.packet=None;self.last_submit=0.;self.publisher_check=0.;self.publishers={};self.last_nudge=0.;self.nudges=0
         self.last_nomotion=0.
-        self.log=(web.run/'localization_quality.jsonl').open('a',buffering=1)
+        self.log=(supervisor.run/'localization_quality.jsonl').open('a',buffering=1)
         from std_srvs.srv import Empty
         self.empty=Empty
-        self.nudge=web.create_client(Empty,'/towergo/nav/request_nomotion_update')
+        self.nudge=supervisor.create_client(Empty,'/towergo/nav/request_nomotion_update')
         self.nudge_future=None
         self.reassessment=StaticReassessment();self.previous_amcl_odom=None
-        self.amcl_log=(web.run/'amcl_diagnostics.jsonl').open('a',buffering=1)
+        self.amcl_log=(supervisor.run/'amcl_diagnostics.jsonl').open('a',buffering=1)
 
     def reset(self, cancel_recovery=True):
         self.generation+=1;self.monitor.reset();self.expectation.reset();self.last_scan=None;self.packet=None
-        self.web.sensors.fused_scans.clear()
+        self.supervisor.sensors.fused_scans.clear()
         self.nudges=0;self.last_nudge=0.
-        self.reassessment.reset();self.previous_amcl_odom=None;self.web.confidence.reset()
+        self.reassessment.reset();self.previous_amcl_odom=None;self.supervisor.confidence.reset()
         if cancel_recovery:self.recovery.cancel()
 
     def cancel(self):
@@ -54,7 +54,7 @@ class LocalizationRuntime:
         from .sensors import FRAME
         from .geometry import scan_points
         from tf2_ros import TransformException
-        w=self.web;s=w.sensors
+        w=self.supervisor;s=w.sensors
         ros_now=w.get_clock().now().nanoseconds*1e-9
         def lookup(stamp_ns):
             return w.tf.lookup_transform(FRAME['map'],FRAME['base'],rclpy.time.Time(nanoseconds=stamp_ns))
@@ -96,7 +96,7 @@ class LocalizationRuntime:
                     executor=w.executor_state,command=list(w.cmd),sensors=sensors,**fused)
 
     def tick(self, now):
-        w=self.web;r=self.recovery
+        w=self.supervisor;r=self.recovery
         if now-self.publisher_check>=1:
             self.publisher_check=now
             self.publishers={t:[dict(name=p.node_name,namespace=p.node_namespace) for p in w.get_publishers_info_by_topic(t)]
@@ -146,7 +146,7 @@ class LocalizationRuntime:
         return self.monitor.usable(now)
 
     def observe_amcl(self, stamp, covariance):
-        pose=self.web.sensors.geometry.at(stamp)
+        pose=self.supervisor.sensors.geometry.at(stamp)
         odom=None;delta=None
         if pose is not None:
             odom=[float(pose[0,3]),float(pose[1,3]),math.atan2(pose[1,0],pose[0,0])]
@@ -161,7 +161,7 @@ class LocalizationRuntime:
             self.previous_amcl_odom=(stamp,odom)
         else:self.previous_amcl_odom=None
         def finite(v):return float(v) if math.isfinite(v) else None
-        w=self.web
+        w=self.supervisor
         self.amcl_log.write(json.dumps(dict(wall_time=time.time(),received_monotonic=time.monotonic(),
             stamp=stamp,source_age_s=w.get_clock().now().nanoseconds*1e-9-stamp,
             localization_id=w.localization_id,covariance=[finite(v) for v in covariance],
@@ -171,7 +171,7 @@ class LocalizationRuntime:
             odom=odom,odom_delta=delta,executor=w.executor_state,command=list(w.cmd)),allow_nan=False)+'\n')
 
     def amcl_is_current(self, now):
-        w=self.web
+        w=self.supervisor
         if self.expectation.distance<=0 or self.expectation.yaw<=0:
             from .core import localization_fresh
             return localization_fresh(now-w.amcl_at,w.get_clock().now().nanoseconds*1e-9-w.amcl_stamp)

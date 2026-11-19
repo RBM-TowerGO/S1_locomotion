@@ -18,10 +18,10 @@ from real_navigation.localization_runtime import LocalizationRuntime
 def runtime():
     r=LocalizationRuntime.__new__(LocalizationRuntime)
     c=Confidence();cov=[0.]*36;cov[0]=cov[7]=.02;cov[35]=.29;c.observe(cov);c.tick(0,True,False)
-    r.web=S(confidence=c,localization={'status':'recovering'},initial_message=None,
+    r.supervisor=S(confidence=c,localization={'status':'recovering'},initial_message=None,
             executor_state={'rights':True,'stationary':True,'task':None},state={'busy':False},lease=S(active=False),phase='idle',
             refresh_initialization_transform=lambda:True,amcl_active=True,amcl_lifecycle_at=100,amcl_stamp=100)
-    r.web.events=[];r.web.event=r.web.events.append
+    r.supervisor.events=[];r.supervisor.event=r.supervisor.events.append
     r.recovery=S(status='idle');r.monitor=S(usable=lambda now:True,state={'status':'trusted'})
     r.reassessment=StaticReassessment();r.nudge_future=None;r.requests=[]
     r.nudge=S(service_is_ready=lambda:True,call_async=lambda req:(r.requests.append(req),S(done=lambda:True))[1])
@@ -30,7 +30,7 @@ def runtime():
 
 @pytest.mark.parametrize('failure',['moving','holding','fault','task','rights','stale_executor','busy','lease','tf','quality','manual_stop','amcl_inactive','stale_amcl_lifecycle','sensor'])
 def test_no_reassessment_without_eligibility(failure):
-    r=runtime();w=r.web;stationary=True;sensors=True
+    r=runtime();w=r.supervisor;stationary=True;sensors=True
     if failure=='moving':stationary=False
     if failure=='stale_executor':stationary=False  # caller derives stationary only from < .3 s SDK feedback
     if failure=='holding':w.executor_state['holding']=True
@@ -51,27 +51,27 @@ def test_no_reassessment_without_eligibility(failure):
 def test_runtime_limits_requests_no_initialpose_or_navigation_and_expires():
     r=runtime()
     for now in range(100,111):
-        r.web.amcl_lifecycle_at=now;r.web.amcl_stamp=now
+        r.supervisor.amcl_lifecycle_at=now;r.supervisor.amcl_stamp=now
         r.tick_reassessment(now,True,True)
     assert len(r.requests)==3
-    assert r.web.localization['status']=='manual_required'
-    assert r.web.state['initialized'] is False
+    assert r.supervisor.localization['status']=='manual_required'
+    assert r.supervisor.state['initialized'] is False
     # No publisher, goal sender, or SDK exists in this fixture: unexpected use fails.
 
 def test_no_retry_while_service_request_pending_or_same_amcl_stamp():
     r=runtime();r.tick_reassessment(100,True,True)
-    r.nudge_future=S(done=lambda:False);r.web.amcl_stamp=101
+    r.nudge_future=S(done=lambda:False);r.supervisor.amcl_stamp=101
     r.tick_reassessment(101,True,True);assert len(r.requests)==1
-    r.nudge_future=S(done=lambda:True);r.web.amcl_stamp=100
+    r.nudge_future=S(done=lambda:True);r.supervisor.amcl_stamp=100
     r.tick_reassessment(102,True,True);assert len(r.requests)==1
 
 def test_continuous_log_records_full_covariance_and_exact_odometry_increment():
     r=runtime();r.amcl_log=io.StringIO();r.previous_amcl_odom=None
     r.expectation=S(observe=lambda *args:None)
     pose=np.eye(4)
-    r.web.sensors=S(geometry=S(at=lambda stamp:pose.copy()))
-    r.web.get_clock=lambda:S(now=lambda:S(nanoseconds=102000000000))
-    r.web.localization_id=7;r.web.cmd=(0,0)
+    r.supervisor.sensors=S(geometry=S(at=lambda stamp:pose.copy()))
+    r.supervisor.get_clock=lambda:S(now=lambda:S(nanoseconds=102000000000))
+    r.supervisor.localization_id=7;r.supervisor.cmd=(0,0)
     covariance=[0.]*36;covariance[0]=.02;covariance[7]=.03;covariance[35]=.29;covariance[1]=covariance[6]=.005
     r.observe_amcl(100,covariance)
     pose[0,3]=.012;angle=.05;pose[:2,:2]=[[math.cos(angle),-math.sin(angle)],[math.sin(angle),math.cos(angle)]]
@@ -86,7 +86,7 @@ def test_continuous_log_records_full_covariance_and_exact_odometry_increment():
 @pytest.mark.parametrize('stamp',[90,100,100.1])
 def test_old_amcl_never_changes_confidence(stamp):
     from real_navigation.core import localization_fresh
-    cls=next(n for n in ast.parse((ROOT/'scripts/real_navigation/web.py').read_text()).body if isinstance(n,ast.ClassDef))
+    cls=next(n for n in ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text()).body if isinstance(n,ast.ClassDef))
     fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='amcl')
     ns=dict(time=time,math=math,FRAME={'map':'map'},localization_fresh=localization_fresh)
     exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'amcl','exec'),ns)

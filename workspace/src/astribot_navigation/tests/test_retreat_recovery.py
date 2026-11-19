@@ -90,8 +90,8 @@ def test_reverse_speed_is_bounded_in_normal_and_recovery_commands():
 
 
 def coordinator():
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(x for x in tree.body if isinstance(x,ast.ClassDef) and x.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(x for x in tree.body if isinstance(x,ast.ClassDef) and x.name=='NavigationSupervisor')
     fn=next(x for x in cls.body if isinstance(x,ast.FunctionDef) and x.name=='tick_retreat')
     ns={};exec(compile(ast.Module(body=[fn],type_ignores=[]),'retreat','exec'),ns)
     sent=[];stops=[];goals=[]
@@ -122,8 +122,8 @@ def test_dispatch_does_not_reverse_without_clearance_or_fresh_feedback(blocked,s
 
 def test_live_clearance_uses_full_cloud_not_decimated_display_and_rejects_old_data():
     import threading
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(x for x in tree.body if isinstance(x,ast.ClassDef) and x.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(x for x in tree.body if isinstance(x,ast.ClassDef) and x.name=='NavigationSupervisor')
     fn=next(x for x in cls.body if isinstance(x,ast.FunctionDef) and x.name=='retreat_clearance')
     ns=dict(np=np,backup_clearance=backup_clearance)
     exec(compile(ast.Module(body=[fn],type_ignores=[]),'clearance','exec'),ns)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Inject a wrong estimate ONLY into localhost Domain 125 mock replay.
-Start tg-navigation.sh --mode mock --replay BAG --port 8769 first.
+Start tg-navigation.sh --mode mock --replay BAG, then tg-navigation-web.sh --replay --port 8769.
 """
 import argparse,json,math,os,re,time,urllib.request
 from pathlib import Path

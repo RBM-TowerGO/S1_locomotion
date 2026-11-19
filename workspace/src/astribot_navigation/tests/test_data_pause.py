@@ -7,8 +7,8 @@ import pytest
 ROOT=Path(__file__).resolve().parents[1]
 
 def coordinator():
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     names={'pause_allowed','pause_navigation','tick_data_pause','prepare_navigation'}
     cls=ast.ClassDef(name='Coordinator',bases=[],keywords=[],body=[n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name in names],decorator_list=[])
     import sys
@@ -84,8 +84,8 @@ def test_long_scan_gap_keeps_original_task_until_data_returns():
     assert w.phase=='preparing' and w.sent[-1]==('prepare',dict(task='original',speed=.05))
 
 def test_stop_clears_pause_and_invalidates_old_action():
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='stop')
     end=next(i+1 for i,n in enumerate(fn.body) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Attribute) and t.attr=='goal_attempt' for t in n.targets))
     ns={};exec(compile(ast.fix_missing_locations(ast.Module(body=fn.body[:end],type_ignores=[])),'stop-prefix','exec'),{'self':(w:=coordinator())})
@@ -102,8 +102,8 @@ def test_actual_dispatch_prioritizes_manual_lease_loss(browser_valid,tf_ok,quali
     w.lease.active=True;w.lease.task='task';w.valid=lambda t:browser_valid
     w.state.update(ready=False,ready_checks={'sensors':False})
     w.sensors.received['scan']=100;w.sensors.stamps['scan']=100-scan_age
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=='self.lease.active')
     exec(compile(ast.fix_missing_locations(ast.Module(body=[block],type_ignores=[])),'dispatch','exec'),
@@ -130,8 +130,8 @@ def test_blocked_reverse_rechecks_the_same_arc_and_restarts_clear_time():
         queries.append((distance,twist))
         return next(samples),'后退路径有障碍'
     w.retreat_clearance=clearance
-    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
-    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tree=ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=='self.lease.active')
     from real_navigation.core import navigation_command

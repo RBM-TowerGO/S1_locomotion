@@ -3,12 +3,10 @@ import importlib.util
 import math
 from pathlib import Path
 import sys
-import threading
 from types import SimpleNamespace, ModuleType
 import urllib.request
 import urllib.error
 import json
-from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 import numpy as np
 import pytest
 import yaml
@@ -51,10 +49,10 @@ def test_old_lio_updates_history_but_not_health(monkeypatch):
     assert s.seen('lio',msg,history=True)==2.
     assert 'lio' in s.received
 
-def web_ast():return ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
+def supervisor_ast():return ast.parse((ROOT/'scripts/real_navigation/supervisor.py').read_text())
 
 def test_stop_timeout_clears_on_confirmation_without_hiding_other_faults():
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=="self.phase == 'stopping'")
     for error,expected in [('未能确认停车，请检查现场状态',None),('底盘故障','底盘故障')]:
@@ -65,23 +63,19 @@ def test_stop_timeout_clears_on_confirmation_without_hiding_other_faults():
         assert obj.phase=='idle' and obj.state['error']==expected
 
 def test_expired_page_token_returns_actionable_reason_without_enqueuing():
-    fn=next(n for n in web_ast().body if isinstance(n,ast.FunctionDef) and n.name=='server')
-    ns=dict(Path=Path,__file__=str(ROOT/'scripts/real_navigation/web.py'),BaseHTTPRequestHandler=BaseHTTPRequestHandler,
-            ThreadingHTTPServer=ThreadingHTTPServer,threading=threading,json=json)
-    exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'server','exec'),ns)
-    node=SimpleNamespace(token='new-session')
-    server=ns['server'](node,0)
+    from real_navigation.web import server
+    http=server(SimpleNamespace(token='new-session'),0)
     try:
-        req=urllib.request.Request('http://127.0.0.1:%d/api/localize'%server.server_port,data=b'{}',headers={'X-Session-Token':'old-session'})
+        req=urllib.request.Request('http://127.0.0.1:%d/api/localize'%http.server_port,data=b'{}',headers={'X-Session-Token':'old-session'})
         with pytest.raises(urllib.error.HTTPError) as result:urllib.request.urlopen(req)
         assert result.value.code==403
         assert '刷新' in json.loads(result.value.read())['error']
-    finally:server.shutdown();server.server_close()
+    finally:http.shutdown();http.server_close()
 
 @pytest.mark.parametrize('active', [False,True])
 def test_idle_cancel_does_not_claim_motion_or_wait_for_stop(active):
     import time
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='stop')
     ns=dict(time=time)
     exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'stop','exec'),ns)
@@ -107,26 +101,29 @@ def test_scan_endpoints_filter_missing_and_out_of_range():
 
 @pytest.mark.parametrize('age,missing_tf,expected,source_age',[(.1,False,1,None),(1.,False,0,None),(.1,True,0,None),(.1,False,0,.9),(.1,False,1,.535),(.1,False,1,.3)])
 def test_scan_overlay_uses_timestamped_transform_or_hides(age,missing_tf,expected,source_age):
-    from scipy.spatial.transform import Rotation
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
-    fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='update_obstacles')
-    ns=dict(np=np,Rotation=Rotation,SCAN_MAX_SOURCE_AGE=.8,FRAME={'map':'map','front':'front'},
-            rclpy=SimpleNamespace(time=SimpleNamespace(Time=lambda **kw:kw)))
-    exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'overlay','exec'),ns)
-    calls=[]
-    def lookup(a,b,stamp):
-        calls.append((a,b,stamp))
-        if missing_tf:raise RuntimeError('no transform')
-        return SimpleNamespace(transform=SimpleNamespace(rotation=SimpleNamespace(x=0,y=0,z=0,w=1),translation=SimpleNamespace(x=2,y=3,z=0)))
-    node=SimpleNamespace(sensors=SimpleNamespace(obstacles={},latest_scan=(10.-age,[[1.,0.,0.]]),error=None),state={},
-        tf=SimpleNamespace(lookup_transform=lookup),get_clock=lambda:SimpleNamespace(now=lambda:SimpleNamespace(nanoseconds=10_000_000_000)))
-    if source_age is not None:node.sensors.latest_scan_source_stamp=10.-source_age
-    ns['update_obstacles'](node)
-    assert node.state['laser_scan_age']==round(source_age if source_age is not None else age,3)
-    assert len(node.state['laser_scan'])==expected
+    from real_navigation.geometry import scan_points
+    tree=ast.parse((ROOT/'scripts/real_navigation/web_client.py').read_text())
+    fn=next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='scan_overlay')
+    ns=dict(scan_points=scan_points, FRAME={'map':'map','base':'base'},
+            Time=SimpleNamespace(from_msg=lambda stamp:stamp), TransformException=LookupError)
+    exec(compile(ast.Module(body=[fn],type_ignores=[]),'overlay','exec'),ns)
+    reference = int(round((10.-age)*1e9))
+    calls = []
+    def project(points, frame, target, stamp):
+        calls.append((frame, target, stamp.nanoseconds))
+        if target=='map' and missing_tf:raise LookupError()
+        return [[3.,3.]]
+    scan=SimpleNamespace(header=SimpleNamespace(stamp=SimpleNamespace(nanoseconds=reference),frame_id='front'),
+                         ranges=[1.],range_min=.15,range_max=20.)
+    node=SimpleNamespace(scans=[(reference,scan)],project=project)
+    source=10.-(source_age if source_age is not None else age)
+    state=dict(scan_reference_ns=reference,scan_source_stamp=source,scan_source_timeout=.8,sensor_error=None)
+    overlay=ns['scan_overlay'](node,state,10.)
+    assert overlay['laser_scan_age']==round(10.-source,3)
+    assert len(overlay['laser_scan'])==expected
     if expected:
-        assert node.state['laser_scan']==[[3.,3.]]
-        assert calls==[('map','front',{'seconds':9.9})]
+        assert overlay['laser_scan']==[[3.,3.]]
+        assert calls==[('front','base',reference), ('front','map',reference)]
 
 
 @pytest.mark.parametrize('linear,angular,healthy,confirmed', [
@@ -141,7 +138,7 @@ def test_scan_overlay_uses_timestamped_transform_or_hides(age,missing_tf,expecte
     (float('nan'),0.,True,False),
 ])
 def test_stop_confirmation_tolerates_stationary_jitter_only(linear,angular,healthy,confirmed):
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=="self.phase == 'stopping'")
     code=compile(ast.fix_missing_locations(ast.Module(body=[block],type_ignores=[])),'stop-block','exec')
@@ -161,7 +158,7 @@ def test_stop_confirmation_tolerates_stationary_jitter_only(linear,angular,healt
 
 
 def test_stop_confirmation_motion_resets_dwell():
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=="self.phase == 'stopping'")
     code=compile(ast.fix_missing_locations(ast.Module(body=[block],type_ignores=[])),'stop-block','exec')
@@ -176,7 +173,7 @@ def test_stop_confirmation_motion_resets_dwell():
 
 
 def test_stale_sensor_still_faults_even_when_nav2_is_recovering():
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=='self.lease.active')
     stopped=[]
@@ -192,7 +189,7 @@ def test_stale_sensor_still_faults_even_when_nav2_is_recovering():
 
 
 def test_initialization_uses_exact_confirmed_tf_and_waits_without_chasing_new_scan():
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='refresh_initialization_transform')
     ns=dict(FRAME={'odom':'odom','front':'front'},rclpy=SimpleNamespace(time=SimpleNamespace(Time=lambda **kw:kw)))
     exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'initialization-tf','exec'),ns)
@@ -218,7 +215,7 @@ def test_initialization_uses_exact_confirmed_tf_and_waits_without_chasing_new_sc
 
 def test_initial_pose_keeps_confirmed_integer_nanoseconds_without_float_roundtrip():
     import time
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='localize')
     stamp=1792756845999991001;published=[]
     def message():
@@ -248,7 +245,7 @@ def stop_evidence_fixture(obj):
 
 @pytest.mark.parametrize('stationary,age',[(False,.01),(True,.31)])
 def test_stop_requires_fresh_independent_sdk_confirmation(stationary,age):
-    cls=next(n for n in web_ast().body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    cls=next(n for n in supervisor_ast().body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=="self.phase == 'stopping'")
     obj=SimpleNamespace(phase='stopping',phase_at=0.,still_since=9.,result_pending='canceled',

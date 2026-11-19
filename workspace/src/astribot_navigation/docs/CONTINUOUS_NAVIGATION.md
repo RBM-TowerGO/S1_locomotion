@@ -1,11 +1,54 @@
 # 真机导航
 
-## 2026-11-20 网页移出控制链路
+## 启动与 ROS 接口
+
+在 S1B 的 `workspace/src/astribot_navigation` 目录启动导航。已有地图或配置参数仍传给这个入口。
+
+```bash
+./scripts/tg-navigation.sh --mode hardware
+```
+
+网页按需在 S1B 的另一个终端接入，默认监听本机 8767 端口。退出或重新启动网页后，可以继续查看原任务。网页的历史轨迹从该客户端接入时开始绘制。
+
+```bash
+./scripts/tg-navigation-web.sh --port 8767
+```
+
+真机与观察模式均使用 Domain 25。回放沿用 `tg-navigation.sh --mode mock --replay BAG`，可选网页使用 `tg-navigation-web.sh --replay`（Domain 125）。SSH 转发仍为 `ssh -N -L 8767:127.0.0.1:8767 S1B`。
+
+在 S1B 的 Bash 中可以直接读取当前状态和接口定义：
+
+```bash
+source scripts/navigation_env.sh
+ros2 interface show astribot_nav_interfaces/srv/NavigationCommand
+ros2 topic echo /towergo/nav/task_state --qos-reliability best_effort --once
+```
+
+`/towergo/nav/command` 使用 `astribot_nav_interfaces/srv/NavigationCommand`。同一个调用方使用稳定的 `owner`（16–128 个字符）。`accepted` 表示监督节点已受理，拒绝原因在 `reason`。后续进展和最终结果通过 `/towergo/nav/task_state` 获取，类型为 `std_msgs/msg/String`，内容为 JSON。定位按 `localization_id` 对应 `localization.id/status`，运动按 `task_id` 对应 `task/phase/result`。运动的最终结果沿用停车确认。
+
+| operation | 输入 |
+|---|---|
+| `localize` | `owner, x, y, yaw`，地图坐标（m、rad） |
+| `goal` | 同上，加 `speed`（m/s） |
+| `nudge` | `owner, x, y, yaw, speed`，表示机器人自身坐标系的前移、左移和转角增量 |
+| `stop` | 只需 `operation`，取消当前操作 |
+
+从源码部署时，在 S1B 的 `S1_locomotion` 仓库根目录编译接口包一次，两个启动脚本都会加载它。
+
+```bash
+source /opt/ros/humble/setup.bash
+export PYTHONPATH="$PWD/runtime_ws/build_python:${PYTHONPATH:-}"
+cd workspace/navigation_ws
+colcon build --base-paths ../src/astribot_navigation/astribot_nav_interfaces --packages-select astribot_nav_interfaces --cmake-args -DBUILD_TESTING=OFF -DPython3_EXECUTABLE=/usr/bin/python3
+```
+
+## 导航控制链路
 
 控制链路改为 Nav2 的常规结构：`controller_server → /towergo/nav/cmd_vel_nav → 执行器 → SDK`。
 
-- **执行器**直接订阅 `cmd_vel_nav`。收到非零速度时自动开始一个内部任务，硬限速取 `navigation.yaml` 的 `max_speed`；每个目标的速度由网页写入 RPP 的 `desired_linear_vel`。0.3 s 收不到速度指令就原地保持（目标结束、取消、控制器卡住都走这一条）；保持稳定之前不接受新的运动。
-- **网页**只负责：选点、初始化定位、写入目标速度参数、通过 `NavigateToPose`/`FollowPath` 动作发目标和取消、显示状态。原来的速度转发、prepare 握手、浏览器心跳许可、Nav2 反馈超时判断全部删除。网页断开或卡顿不影响已提交的目标。
+- **执行器**直接订阅 `cmd_vel_nav`。收到非零速度时自动开始一个内部任务，硬限速取 `navigation.yaml` 的 `max_speed`；每个目标的速度由导航监督节点写入 RPP 的 `desired_linear_vel`。0.3 s 收不到速度指令就原地保持（目标结束、取消、控制器卡住都走这一条）；保持稳定之前不接受新的运动。
+- **导航监督节点**负责传感器桥接、定位初始化与质量监测、提交和取消任务、停稳确认，独立于 HTTP 端口。
+- **网页**调用监督节点的 ROS 服务，订阅状态、地图、路径和雷达话题，在自己的进程内生成显示叠加。
 - **停止**：取消 Nav2 目标，同时通过 `executor_control` 发带外保持指令；执行器在 1 s 内忽略尚未停下的控制器输出。普通停止、到达、失败都只做原地保持，不再调用厂商整机停止。整机停止只用于不可恢复的硬故障，触发后需要重启会话。
 - **运行监督**：传感器断流、map→base 变换超时或 AMCL 未激活、执行器故障或无控制权、Nav2 未激活，任一项持续 1 s 才取消目标；短暂抖动不再打断任务。
 
@@ -19,9 +62,9 @@
 | 跟随 | Nav2 `RegulatedPurePursuitController`：路线在背后时原地转，否则前进并按曲率/障碍/接近减速，按整机轮廓预测碰撞 | RotationShim + DWB（441 条采样、6 个手调 critic），普通导航中的横移与倒车 |
 | 重试 | 行为树：1 Hz 重规划；失败后清局部代价地图、等待 2 s，最多 6 轮，用尽后 abort | 无限重试加 1 s 延迟 |
 | 执行器 | 按实际周期积分（单周期上限 50 ms），轴停止或反向时撤回该轴领先量 | 10 ms 积分上限（实际速度只剩 50–83%）、纯转向前的 0.15 s 冻结（turn_hold） |
-| 网页 | 只负责转发、显示，并在硬故障时停车 | 暂停→等待 2 s→重新提交的状态机；定位质量导致任务取消；自动 5 帧搜索恢复；运行中的 no-motion 保鲜调用；协方差静止重评估 |
+| 任务监督 | 提交目标、显示诊断，并在持续硬故障时停车 | 暂停→等待 2 s→重新提交的状态机；定位质量导致任务取消；自动 5 帧搜索恢复；运行中的 no-motion 保鲜调用；协方差静止重评估 |
 
-运行中只有以下硬条件会停车并结束任务（不会自动重提）：map→base TF 超时或 AMCL 未激活、传感器断流或 LIO 历史中断、SDK 反馈/控制权/执行器故障、Nav2 反馈超时或 abort、浏览器控制许可过期、手动停止。
+运行中只有以下硬条件会停车并结束任务（不会自动重提）：map→base TF 超时或 AMCL 未激活、传感器断流或 LIO 历史中断、SDK 反馈/控制权/执行器故障、Nav2 返回 abort、手动停止。
 
 扫描与地图匹配质量、AMCL 协方差、amcl_pose 更新节奏改为只告警：定位初始化成功和提交目标前必须通过，运行中只显示。匹配失配会锁存，下一次提交前需要重新初始化。
 

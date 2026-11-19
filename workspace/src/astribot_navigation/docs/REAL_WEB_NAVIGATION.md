@@ -10,6 +10,12 @@
 /home/astribot/TowerGO/S1_locomotion/workspace/src/astribot_navigation/scripts/tg-navigation.sh --mode hardware
 ```
 
+需要网页时，在 S1B 的另一个终端运行：
+
+```bash
+/home/astribot/TowerGO/S1_locomotion/workspace/src/astribot_navigation/scripts/tg-navigation-web.sh --port 8767
+```
+
 电脑另开终端：
 
 ```bash
@@ -31,12 +37,14 @@ ssh -N -L 8767:127.0.0.1:8767 S1B
 ## 暂停与停车
 
 - 普通零速度与按键松开一致：停止累加，曾经发送过目标时继续发送自己的最后目标；后续有效速度可以继续。保持目标不等于立即刹停，机器人可能仍在追踪该目标。
-- 取消、浏览器失联、定位/传感器失效或指令超时撤销任务并调用 SDK `stop_robot()`。这是整机停止接口；一旦调用，当前执行器锁定，不自动恢复，重新使用需重启会话。
+- 网页、脚本和其他 ROS 客户端均可请求停止。监督节点取消 Nav2 动作并通知执行器保持，网页进程退出时当前任务继续。
 - 控制权丢失后不再发送目标或停车指令。停止前尚未发送任何目标的会话不会调用整机停止。
 - 页面根据有效里程计确认静止；未确认时显示正在停车，不把发出请求当作已经停住。
-- 保留浏览器 0.5 秒失联、导航指令 0.3 秒超时、控制周期 0.1 秒限制及原有反馈和跟踪误差限制。
+- 保留导航指令 0.3 秒超时、控制周期 0.1 秒限制及原有反馈和跟踪误差限制。
 
 ## 配置和接口
+
+原生 ROS 命令格式和状态字段见 [真机导航](CONTINUOUS_NAVIGATION.md)。
 
 `real_navigation/navigation.yaml` 的 `max_speed: 0.3` 是导航速度上限。启动不再要求 verified、reviewed_by、reviewed_at、验收附件或模块哈希。停车调用直接使用随程序提供的 vendor_stop 模块，不再动态加载外部停车插件。仍检查数值、变换、轮廓与控制参数是否合法。
 
@@ -46,7 +54,7 @@ ssh -N -L 8767:127.0.0.1:8767 S1B
 ./scripts/tg-navigation.sh --mode hardware --check
 ```
 
-HTTP 只监听 127.0.0.1:8767；保留 token 和原有 `/api/localize`、`/api/goal`、`/api/stop`、`/api/heartbeat` 接口。真实导航使用 Domain 25，独立话题与 TF；地图源文件不修改。网页显示配置最高速度和实时健康状态，不用验收标记控制页面。
+可选网页的 HTTP 监听 127.0.0.1:8767；保留 token 和原有 `/api/localize`、`/api/goal`、`/api/nudge`、`/api/stop`、`/api/heartbeat` 接口。真实导航使用 Domain 25，独立话题与 TF；地图源文件不修改。网页显示配置最高速度和实时健康状态，不用验收标记控制页面。
 
 ## 验证与日志
 

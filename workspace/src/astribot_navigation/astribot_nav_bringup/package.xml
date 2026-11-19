@@ -12,6 +12,7 @@
 <depend>astribot_nav_sensors</depend>
 <depend>astribot_nav_bridge</depend>
 <depend>astribot_nav_api</depend>
+<exec_depend>astribot_nav_interfaces</exec_depend>
 <depend>slam_toolbox</depend>
 <depend>nav2_bringup</depend>
 <exec_depend>nav2_common</exec_depend>

@@ -34,8 +34,8 @@ def test_vectorized_deskew_rotation_matches_independent_rotation_library():
 
 
 def test_idle_scan_gap_preserves_fresh_localization_but_not_invalid_pose():
-    tree=ast.parse((Path(__file__).resolve().parents[1]/'scripts/real_navigation/web.py').read_text())
-    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tree=ast.parse((Path(__file__).resolve().parents[1]/'scripts/real_navigation/supervisor.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NavigationSupervisor')
     block=next(n for n in ast.walk(cls) if isinstance(n,ast.If) and ast.unparse(n.test)=='self.initial_message')
     code=compile(ast.fix_missing_locations(ast.Module(body=[block],type_ignores=[])),'localization-state','exec')
     for valid in [True,False]:
