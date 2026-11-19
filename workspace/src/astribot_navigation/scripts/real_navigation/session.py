@@ -11,7 +11,7 @@ import time
 import uuid
 import yaml
 from .core import (validate_config,digest,costmap_inflation_radius,GOAL_XY,GOAL_YAW,
-                   MAX_ANGULAR_SPEED)
+                   MAX_ANGULAR_SPEED,mppi_velocity_limits)
 
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
@@ -49,25 +49,14 @@ def nav_params(config,mapfile,replay):
     cp=base['controller_server']['ros__parameters']
     horizon=config.get('collision_time_horizon',1.5)
     cp['controller_plugins']=['FollowPath','Nudge']
-    # One controller owns path tracking: RPP turns in place when the path is
-    # behind, otherwise drives forward with curvature/obstacle/approach
-    # slow-down and a full-footprint collision projection. No lateral or
-    # reverse sampling, so the executor never sees sign-flipping vy/vx.
     cp['FollowPath']=dict(
-        plugin='nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController',
-        desired_linear_vel=.05,  # Replaced per goal by controller_parameters().
-        lookahead_dist=.5,min_lookahead_dist=.3,max_lookahead_dist=.9,lookahead_time=1.5,
-        use_velocity_scaled_lookahead_dist=True,use_interpolation=True,
-        use_rotate_to_heading=True,rotate_to_heading_min_angle=.6,
-        rotate_to_heading_angular_vel=MAX_ANGULAR_SPEED,max_angular_accel=.6,
-        allow_reversing=False,goal_dist_tol=GOAL_XY,
-        use_collision_detection=True,max_allowed_time_to_collision_up_to_carrot=horizon,
-        use_regulated_linear_velocity_scaling=True,regulated_linear_scaling_min_radius=.9,
-        regulated_linear_scaling_min_speed=.03,
-        use_cost_regulated_linear_velocity_scaling=True,cost_scaling_dist=.6,cost_scaling_gain=1.,
-        inflation_cost_scaling_factor=5.,
-        min_approach_linear_velocity=.03,approach_velocity_scaling_dist=.6,
-        transform_tolerance=.3)
+        plugin='nav2_mppi_controller::MPPIController', motion_model='Omni',
+        model_dt=.05, time_steps=max(1, round(horizon/.05)), batch_size=512,
+        vx_min=0., wz_max=MAX_ANGULAR_SPEED, **mppi_velocity_limits(config['max_speed']),
+        vx_std=.15, vy_std=.10, wz_std=.25, transform_tolerance=.3,
+        critics=['ConstraintCritic','CostCritic','PathFollowCritic','PathAngleCritic',
+                 'GoalCritic','GoalAngleCritic'],
+        CostCritic=dict(consider_footprint=True))
     cp['Nudge']=dict(plugin='towergo::OmniController',desired_linear_vel=.05,collision_time_horizon=horizon)
     # A 180 deg in-place turn at 0.3 rad/s takes ~11 s without XY progress.
     cp['progress_checker'].update(required_movement_radius=.05,movement_time_allowance=20.)
@@ -80,16 +69,9 @@ def nav_params(config,mapfile,replay):
         p['track_unknown_space']=True
         p['static_layer']={'plugin':'nav2_costmap_2d::StaticLayer','map_topic':'/towergo/nav/map','map_subscribe_transient_local':True}
         p['inflation_layer'].update(inflation_radius=inflation,cost_scaling_factor=5.)
-        if name=='global_costmap':
-            # Static map only. The obstacle clouds exclude floor returns, so in
-            # open space no ray ever clears a marked cell; in this non-rolling
-            # map stray returns persisted, invalidated the path and forced
-            # detours. Live obstacles stay in the rolling local costmap.
-            p['plugins']=['static_layer','inflation_layer']
-            p.pop('obstacle_layer',None)
-            continue
         p['plugins']=['static_layer','obstacle_layer','inflation_layer']
-        layer=p['obstacle_layer']=dict(plugin='nav2_costmap_2d::ObstacleLayer',observation_sources='front back')
+        layer=p['obstacle_layer']=dict(plugin='nav2_costmap_2d::ObstacleLayer',
+                                      observation_sources='front back front_clear back_clear')
         # The bridge classifies physical returns relative to the nearby floor.
         # Nav2's second height test runs in the global costmap frame. On a
         # slope it could reject a valid low return, so leave that gate open.
@@ -99,9 +81,12 @@ def nav_params(config,mapfile,replay):
             layer['max_obstacle_height']=1.e6
         for sensor in ('front','back'):
             layer[sensor]=dict(topic='/towergo/nav/obstacles/'+sensor,data_type='PointCloud2',
-                               marking=True,clearing=True,obstacle_max_range=2.5,raytrace_max_range=3.0,
+                               marking=True,clearing=False,obstacle_max_range=2.5,
                                min_obstacle_height=-1.e6 if relative_ground else config['obstacle_min_height'],
                                max_obstacle_height=1.e6 if relative_ground else config['obstacle_max_height'])
+            layer[sensor+'_clear']=dict(topic='/towergo/nav/clearing/'+sensor,data_type='PointCloud2',
+                                        marking=False,clearing=True,raytrace_max_range=3.0,
+                                        min_obstacle_height=-1.e6,max_obstacle_height=1.e6)
     bt=base['bt_navigator']['ros__parameters']
     # Action acknowledgement is not a sensor watchdog. On the loaded Orin,
     # the generic 20 ms budget can abort a healthy concurrent replan.
@@ -109,10 +94,8 @@ def nav_params(config,mapfile,replay):
     bt['default_nav_through_poses_bt_xml']=str(REPO/'astribot_nav_bringup/config/navigation_through.xml')
     bt['default_nav_to_pose_bt_xml']=str(HERE/'navigation.xml')
     bt['plugin_lib_names']=['nav2_compute_path_through_poses_action_bt_node','nav2_compute_path_to_pose_action_bt_node','nav2_follow_path_action_bt_node','nav2_pipeline_sequence_bt_node',
-        'nav2_rate_controller_bt_node','nav2_is_path_valid_condition_bt_node',
+        'nav2_rate_controller_bt_node','nav2_is_path_valid_condition_bt_node','nav2_goal_updated_controller_bt_node',
         'nav2_globally_updated_goal_condition_bt_node','nav2_path_expiring_timer_condition',
-        # Stock bounded recovery: clear local costmap / wait, then abort.
-        # ReactiveFallback is a BehaviorTree.CPP builtin: no Nav2 library to load.
         'nav2_recovery_node_bt_node','nav2_round_robin_node_bt_node',
         'nav2_goal_updated_condition_bt_node','nav2_clear_costmap_service_bt_node','nav2_wait_action_bt_node']
     return {'towergo':{'nav':base}}
@@ -264,9 +247,9 @@ def main():
                 '/towergo/nav/scan','/towergo/nav/amcl_pose','/towergo/nav/tf','/towergo/nav/tf_static',
                 '/towergo/nav/executor_status','/towergo/nav/executor_control','/towergo/nav/cmd_vel_nav','/towergo/nav/route_execution',
                 '/astribot_chassis/joint_space_states','/towergo/nav/map','/clock',
-                # Local obstacle evidence: what DWB actually avoided.
                 '/towergo/nav/local_costmap/costmap','/towergo/nav/local_costmap/published_footprint',
-                '/towergo/nav/plan','/towergo/nav/obstacles/front','/towergo/nav/obstacles/back']
+                '/towergo/nav/plan','/towergo/nav/obstacles/front','/towergo/nav/obstacles/back',
+                '/towergo/nav/clearing/front','/towergo/nav/clearing/back']
             qos={t:dict(reliability='best_effort',durability='volatile',history='keep_last',depth=10)
                  for t in diagnostic_topics}
             for t in ('/towergo/nav/tf_static','/towergo/nav/map'):

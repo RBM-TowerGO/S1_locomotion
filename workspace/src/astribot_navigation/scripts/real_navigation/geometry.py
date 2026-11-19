@@ -118,6 +118,10 @@ class Geometry:
         return (current_base-self.base_lidar[:3,3])@self.base_lidar[:3,:3]
 
     def cloud(self, points, pose, rear=False):
+        obstacles, ranges, _ = self.cloud_with_ground(points, pose, rear)
+        return obstacles, ranges
+
+    def cloud_with_ground(self, points, pose, rear=False):
         from towergo_real.geometry import inside_polygon
         points=np.asarray(points)
         points=points[np.isfinite(points).all(axis=1)]
@@ -150,7 +154,9 @@ class Geometry:
         result=np.full(720,np.inf)
         np.minimum.at(result,bins,ranges)
         result[~np.isfinite(result)]=np.nan
-        return obstacle.astype(np.float32),result
+        # Retain measured floor endpoints for clearing dynamic costmap cells.
+        ground=base[np.abs(heights)<=self.config['obstacle_min_height']]-origin
+        return obstacle.astype(np.float32),result,ground.astype(np.float32)
 
 
 def safe_pose(grid, pose, footprint, padding=.06):

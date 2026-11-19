@@ -7,21 +7,22 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from real_navigation.session import nav_params
 
 @pytest.mark.parametrize('replay',[False,True])
-def test_both_costmaps_use_only_saved_map(replay):
+def test_both_costmaps_use_static_map_and_live_observations(replay):
     config=yaml.safe_load((ROOT/'scripts/real_navigation/navigation.yaml').read_text())
     params=nav_params(config,Path('/tmp/unchanged-map.yaml'),replay)['towergo']['nav']
     for name in ('global_costmap','local_costmap'):
         p=params[name][name]['ros__parameters']
-        expected=(['static_layer','inflation_layer'] if name=='global_costmap'
-                  else ['static_layer','obstacle_layer','inflation_layer'])
-        assert p['plugins']==expected
-        if name=='global_costmap':
-            assert 'obstacle_layer' not in p and 'voxel_layer' not in p
+        assert p['plugins']==['static_layer','obstacle_layer','inflation_layer']
+        for side in ('front','back'):
+            assert p['obstacle_layer'][side]['marking']
+            assert p['obstacle_layer'][side+'_clear']['clearing']
         assert p['static_layer']['map_topic']=='/towergo/nav/map'
         assert p['inflation_layer']['inflation_radius']==.75
         assert p['footprint_padding']==config['footprint_padding']
         assert p['track_unknown_space']
-    assert params['controller_server']['ros__parameters']['FollowPath']['sim_time']==config['collision_time_horizon']
+    controller=params['controller_server']['ros__parameters']['FollowPath']
+    assert controller['motion_model']=='Omni'
+    assert controller['time_steps']*controller['model_dt']==pytest.approx(config['collision_time_horizon'])
     assert params['map_server']['ros__parameters']['yaml_filename']=='/tmp/unchanged-map.yaml'
     assert params['amcl']['ros__parameters']['scan_topic']=='/towergo/nav/scan'
 

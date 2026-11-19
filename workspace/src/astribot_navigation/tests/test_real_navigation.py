@@ -67,8 +67,8 @@ class NavigationTests(unittest.TestCase):
     def test_small_speed_no_internal_floor(self):
         p=controller_parameters(.001)
         self.assertEqual(p['Nudge.desired_linear_vel'],.001)
-        self.assertEqual(p['FollowPath.max_vel_x'],.001)
-        self.assertEqual(p['FollowPath.max_speed_xy'],.001)
+        self.assertGreater(p['FollowPath.vy_max'],0.)
+        self.assertAlmostEqual(math.hypot(p['FollowPath.vx_max'],p['FollowPath.vy_max']),.001)
 
     def test_curvature_preserved(self):
         v,_,w=limited(.6,0,.3,.3)

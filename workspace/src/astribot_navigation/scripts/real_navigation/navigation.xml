@@ -1,28 +1,22 @@
-<!--
-  Nav2 Humble stock "replanning and recovery" pattern, trimmed to the
-  recoveries this robot can use. Replan at 1 Hz while following; on failure
-  clear the local costmap, wait, and retry. After six recovery cycles the
-  action aborts and the web layer ends the task (it does not resubmit).
--->
+<!-- Reuse a valid route. On blockage, halt tracking and retry the same goal. -->
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
-      <PipelineSequence name="NavigateWithReplanning">
-        <RateController hz="1.0">
-          <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
-        </RateController>
-        <RecoveryNode number_of_retries="1" name="FollowPath">
+    <RetryUntilSuccessful num_attempts="-1">
+      <Fallback>
+        <PipelineSequence>
+          <GoalUpdatedController>
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+          </GoalUpdatedController>
+          <RateController hz="1.0">
+            <Fallback>
+              <IsPathValid path="{path}"/>
+              <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            </Fallback>
+          </RateController>
           <FollowPath path="{path}" controller_id="FollowPath" goal_checker_id="goal_checker"/>
-          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
-        </RecoveryNode>
-      </PipelineSequence>
-      <ReactiveFallback name="RecoveryFallback">
-        <GoalUpdated/>
-        <RoundRobin name="RecoveryActions">
-          <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
-          <Wait wait_duration="2"/>
-        </RoundRobin>
-      </ReactiveFallback>
-    </RecoveryNode>
+        </PipelineSequence>
+        <Delay delay_msec="2000"><AlwaysFailure/></Delay>
+      </Fallback>
+    </RetryUntilSuccessful>
   </BehaviorTree>
 </root>

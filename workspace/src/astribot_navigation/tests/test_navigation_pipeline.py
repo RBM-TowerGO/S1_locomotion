@@ -69,12 +69,12 @@ def test_new_frames_do_not_starve_active_frame_waiting_for_lio():
         continuity_epoch=0
         def at(self,stamp):return np.eye(4) if pose_ready.is_set() else None
         def deskew(self,raw,stamps,pose):return raw
-        def cloud(self,raw,pose,rear):return raw,np.ones(720)
+        def cloud_with_ground(self,raw,pose,rear):return raw,np.ones(720),np.empty((0,3))
     def decode(msg):
         calls.append(msg)
         if msg==1:decoded.set()
         else:release.wait(1)
-        return np.array([[msg,0.,0.]],dtype=np.float32),np.array([1000000000]),0
+        return np.array([[msg,0.,0.],[msg,.01,0.]],dtype=np.float32),np.array([1000000000]*2),0
     worker=CloudWorker(Geometry,decode,Metrics())
     try:
         worker.submit('front',1,0);assert decoded.wait(1)
@@ -151,7 +151,7 @@ def test_later_frame_can_finish_while_previous_frame_waits_without_rewinding():
         continuity_epoch=0
         def at(self,stamp):return np.eye(4)
         def deskew(self,raw,stamps,pose):return raw
-        def cloud(self,raw,pose,rear):return raw,np.ones(720)
+        def cloud_with_ground(self,raw,pose,rear):return raw,np.ones(720),np.empty((0,3))
     def decode(msg):
         if msg==1:blocked.set();release.wait(2)
         return np.array([[msg,0.,0.]]),np.array([msg*1000000000]),0

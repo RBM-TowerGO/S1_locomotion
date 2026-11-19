@@ -4,6 +4,29 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
 import numpy as np
+from scipy.spatial import cKDTree
+
+
+def obstacle_observations(hits, ground):
+    """Mark supported returns and clear only along measured, sensor-relative rays."""
+    if len(hits):
+        # A single isolated 3D return has no neighbour in this scan.
+        distances, _ = cKDTree(hits).query(hits, k=[2], distance_upper_bound=.10)
+        hits = hits[np.isfinite(distances[:, 0])]
+
+    points = np.concatenate((hits, ground))
+    if not len(points):
+        return hits, points
+
+    # For each azimuth use the closest obstacle. In a ground-only direction
+    # the furthest observed floor point establishes how far the ray can clear.
+    x, y = points[:, 0], points[:, 1]
+    bins = np.floor((np.arctan2(y, x) + np.pi) * (720 / (2 * np.pi))).astype(int) % 720
+    floor = np.arange(len(points)) >= len(hits)
+    distance = np.hypot(x, y)
+    order = np.lexsort((np.where(floor, -distance, distance), floor, bins))
+    first = np.r_[True, np.diff(bins[order]) != 0]
+    return hits, points[order[first]]
 
 
 def match_scans(history,now,after=None):
@@ -116,7 +139,8 @@ class CloudWorker:
                     begin=time.monotonic()
                     deskewed=geometry.deskew(raw,stamps,pose)
                     if deskewed is not None:
-                        points,ranges=geometry.cloud(deskewed,pose,key=='back')
+                        hits,ranges,ground=geometry.cloud_with_ground(deskewed,pose,key=='back')
+                        points,clearing=obstacle_observations(hits,ground)
                         self.metrics.add(key+'_processing_ms',(time.monotonic()-begin)*1000)
                         with self.condition:
                             order=(epoch,stamp)
@@ -124,7 +148,7 @@ class CloudWorker:
                                 self.metrics.count(key+'_out_of_order_discarded');break
                             self.completed[key]=order
                             if key in self.results:self.metrics.count(key+'_result_superseded')
-                            self.results[key]=(key,stamp,points,ranges,epoch,received)
+                            self.results[key]=(key,stamp,points,ranges,epoch,received,clearing)
                     break
                 with self.condition:
                     if self.closed:return

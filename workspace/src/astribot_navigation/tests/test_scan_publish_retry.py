@@ -32,7 +32,7 @@ def setup():
     n=S(worker=S(take=lambda:(batch[:],None)),error=None,
         geometry=S(continuity_epoch=0,at=lambda t:np.eye(4),base_lidar=np.eye(4)),
         metrics=Metrics(),node=S(get_clock=lambda:S(now=lambda:S(nanoseconds=int(clock[0]*1e9)))),
-        cloud_pub={k:Publisher() for k in ('front','back')},obstacles={},recovery_clouds={},
+        cloud_pub={k:Publisher() for k in ('front','back')},clearing_pub={k:Publisher() for k in ('front','back')},
         scans={k:(10.1,ranges) for k in ('front','back')},
         scan_history={k:deque([(10.1,ranges)],maxlen=6) for k in ('front','back')},
         latest_scan_source_stamp=10.,last_pose=(10.3,np.eye(4)),last_pose_stamp_ns=10300000000,
@@ -42,7 +42,7 @@ def setup():
     def result(key,stamp=10.2,epoch=0):
         values=ranges.copy()
         if key=='back':values[:]=np.nan;values[0]=3.
-        return key,stamp,np.empty((0,3)),values,epoch,0.
+        return key,stamp,np.empty((0,3)),values,epoch,0.,np.empty((0,3))
     return n,batch,clock,result
 
 @pytest.mark.parametrize('order',[('front','back'),('back','front')])

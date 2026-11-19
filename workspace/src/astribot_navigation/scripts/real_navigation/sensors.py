@@ -43,6 +43,7 @@ class Sensors:
         self.odom_pub=node.create_publisher(Odometry,NS+'odom',10)
         self.scan_pub=node.create_publisher(LaserScan,NS+'scan',qos_profile_sensor_data)
         self.cloud_pub={k:node.create_publisher(PointCloud2,NS+'obstacles/'+k,qos_profile_sensor_data) for k in ('front','back')}
+        self.clearing_pub={k:node.create_publisher(PointCloud2,NS+'clearing/'+k,qos_profile_sensor_data) for k in ('front','back')}
         self.tf=TransformBroadcaster(node);self.static=StaticTransformBroadcaster(node)
         self.static_transforms=[]
         for rear,key in [(False,'front'),(True,'back')]:
@@ -225,13 +226,14 @@ class Sensors:
         if error:self.fail(error)
         if self.error:return
         now=self.node.get_clock().now().nanoseconds*1e-9
-        for key,stamp,points,ranges,epoch,received in results:
+        for key,stamp,points,ranges,epoch,received,clearing in results:
             if epoch!=self.geometry.continuity_epoch or not -.05<=now-stamp<=.5:
                 self.metrics.count(key+'_stale_output_discarded');continue
             try:
                 source_stamp=rclpy.time.Time(nanoseconds=int(round(stamp*1e9))).to_msg()
                 header=Header();header.stamp=source_stamp;header.frame_id=FRAME[key]
                 self.cloud_pub[key].publish(point_cloud2.create_cloud_xyz32(header,points))
+                self.clearing_pub[key].publish(point_cloud2.create_cloud_xyz32(header,clearing))
                 self.scans[key]=(stamp,ranges)
                 self.scan_history[key].append((stamp,ranges))
                 self.metrics.add(key+'_output_source_age_s',now-stamp)

@@ -97,14 +97,19 @@ def at_goal(pose, goal, tolerances):
     return math.dist(pose[:2], goal[:2]) <= tolerances[0] and abs(angle) <= tolerances[1]
 
 
+def mppi_velocity_limits(speed_limit):
+    # MPPI takes independent axis limits. Keep the diagonal within the
+    # requested translation speed as well as the chassis lateral limit.
+    lateral = min(MAX_LATERAL_SPEED, speed_limit * .5)
+    return dict(vx_max=math.sqrt(speed_limit**2 - lateral**2), vy_max=lateral)
+
+
 def controller_parameters(value, tolerances=(GOAL_XY,GOAL_YAW)):
     value = speed(value)
     if value == 0:
         raise ValueError('速度为 0：保持静止，不启动导航')
-    # FollowPath is RegulatedPurePursuit (forward + yaw only); Nudge keeps
-    # its own omni segment follower for small lateral adjustments.
     return {'Nudge.desired_linear_vel': value,
-            'FollowPath.desired_linear_vel': value,
+            **{'FollowPath.'+k: v for k, v in mppi_velocity_limits(value).items()},
             'goal_checker.xy_goal_tolerance': tolerances[0],
             'goal_checker.yaw_goal_tolerance': tolerances[1],
             'progress_checker.required_movement_radius': min(.05, value * 10.)}
