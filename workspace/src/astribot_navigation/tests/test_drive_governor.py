@@ -35,7 +35,7 @@ def test_ten_minute_slow_plant_lead_bounded(tau):
     p,d=setup(tau);maximum=0
     lead,yaw=d.config['max_position_error'],d.config['max_yaw_error']
     for i in range(60000):
-        v,w=step(p,d)
+        v,_,w=step(p,d)
         maximum=max(maximum,d.tracking['position_error_m'])
         assert d.tracking['position_error_m']<=lead+1e-8
         assert d.tracking['yaw_error_rad']<=yaw+1e-8
@@ -52,7 +52,7 @@ def test_blocked_plant_then_release_no_backlog_burst():
     p.frozen=False
     previous=d.target[:]
     for _ in range(2000):
-        v,w=step(p,d)
+        v,_,w=step(p,d)
         assert 0<=d.target[0]-previous[0]<=.001500001
         assert v<=.15 and abs(w)<=.05
         previous=d.target[:]
@@ -62,7 +62,7 @@ def test_zero_withdraws_outstanding_target():
     p,d=setup()
     for _ in range(100):step(p,d)
     assert d.target[0]-p.p[0]>.02
-    assert step(p,d,v=0,w=0)==(0.,0.)
+    assert step(p,d,v=0,w=0)==(0.,0.,0.)
     assert d.target==p.p
     stopped=p.p[:]
     for _ in range(100):step(p,d,v=0,w=0)
@@ -71,7 +71,7 @@ def test_zero_withdraws_outstanding_target():
 def test_jitter_skip_no_integral_catchup():
     p,d=setup()
     step(p,d);before=d.target[:]
-    assert step(p,d,dt=.2)==(0.,0.)
+    assert step(p,d,dt=.2)==(0.,0.,0.)
     assert d.target==before and d.fault is None and p.stops==0
     step(p,d)
     assert d.target[0]-before[0]<=.00150001
@@ -139,7 +139,7 @@ def test_normal_tracking_lag_keeps_full_requested_speed(gap):
     d.target=[p.p[0]+gap,p.p[1],p.p[2]]
     p.now+=.01
     d.permit('task',p.now);d.command('task',.05,0.,p.now)
-    assert d.tick(p.now)==pytest.approx((.05,0.))
+    assert d.tick(p.now)==pytest.approx((.05,0.,0.))
     assert d.warning is None
 
 def test_inward_yaw_correction_continues_without_growing_existing_error():
@@ -149,7 +149,29 @@ def test_inward_yaw_correction_continues_without_growing_existing_error():
     d.target=[p.p[0]+.0799,p.p[1],p.p[2]+.101]
     p.now+=.01
     d.command('task',.05,-.05,p.now);d.permit('task',p.now)
-    v,w=d.tick(p.now)
+    v,_,w=d.tick(p.now)
     assert v>0 and w<0
     assert d.tracking['position_error_m']<=.1+1e-12
     assert d.tracking['yaw_error_rad']<.101
+
+def test_pure_turn_withdraws_recorded_forward_lead():
+    p,d=setup()
+    step(p,d,v=.3,w=0)
+    d.target[0]=p.p[0]+.117
+    p.send(d.target)
+    assert step(p,d,v=0,w=.20)==(0.,0.,0.)
+    anchor=p.p[:2]
+    for _ in range(100):step(p,d,v=0,w=.20)
+    assert p.p[:2]==pytest.approx(anchor,abs=.002)
+    assert p.p[2]>.03 and d.tracking['applied_command']==pytest.approx([0,0,.20])
+
+
+def test_side_step_uses_native_y_and_circular_lead():
+    p,d=setup();p.p[2]=1.57;p.frozen=True
+    for _ in range(1000):
+        p.advance(.01);d.permit('task',p.now)
+        d.command('task',.06,0,p.now,vy=.04);d.tick(p.now)
+    assert math.hypot(*d.target[:2])==pytest.approx(d.config['max_position_error'])
+    assert d.target[0]/d.target[1]==pytest.approx(1.5)
+    p.advance(.01);d.command('task',0,0,p.now,vy=.05);d.tick(p.now)
+    assert d.target[0]==p.p[0] and d.target[1]>0

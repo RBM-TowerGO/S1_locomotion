@@ -23,7 +23,7 @@ class Feedback {
     if(stamp<=sent||now-stamp<0||now-stamp>=.3)return;
     bool gap=stamp-sent>=.3;sent=stamp;
     valid=d.value("rights",false)&&d.at("fault").is_null()&&!d.value("holding",false)&&!d.at("task").is_null();
-    auto command=d.at("command");stationary=valid&&d.value("stationary",false)&&std::abs(command[0].get<double>())<1e-6&&std::abs(command[1].get<double>())<1e-6;
+    auto command=d.at("command");stationary=valid&&d.value("stationary",false)&&std::abs(command[0].get<double>())<1e-6&&std::abs(command[1].get<double>())<1e-6&&(command.size()<3||std::abs(command[2].get<double>())<1e-6);
     if(!stationary)still_since=-1;else if(gap||still_since<0)still_since=now;
    }catch(...){valid=false;stationary=false;still_since=-1;}
   });

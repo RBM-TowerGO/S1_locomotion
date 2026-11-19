@@ -78,11 +78,14 @@ def test_real_profile_selects_continuous_planner_controller_goal_checker():
     p=nav_params(config,'/tmp/map.yaml',False)['towergo']['nav']
     assert p['planner_server']['ros__parameters']['GridBased']['plugin']=='astribot_nav_bringup/ExactGoalLattice'
     controller=p['controller_server']['ros__parameters']
-    assert controller['FollowPath']['plugin']=='nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController'
-    assert controller['FollowPath']['rotate_to_heading_min_angle']==.7
-    assert controller['FollowPath']['use_collision_detection'] is True
+    follow=controller['FollowPath']
+    assert follow['plugin']=='nav2_rotation_shim_controller::RotationShimController'
+    assert follow['primary_controller']=='dwb_core::DWBLocalPlanner'
+    assert follow['sim_time']==config['collision_time_horizon']
+    assert controller['goal_checker']['xy_goal_tolerance']==.05
+    assert controller['goal_checker']['stateful'] is False
     assert controller['goal_checker']['plugin']=='nav2_controller::SimpleGoalChecker'
-    assert p['local_costmap']['local_costmap']['ros__parameters']['plugins']==['static_layer','inflation_layer']
+    assert p['local_costmap']['local_costmap']['ros__parameters']['plugins']==['static_layer','obstacle_layer','inflation_layer']
     assert p['bt_navigator']['ros__parameters']['default_server_timeout']==1000
     assert p['bt_navigator']['ros__parameters']['bt_loop_duration']==50
     tree=(ROOT/'scripts/real_navigation/navigation.xml').read_text()

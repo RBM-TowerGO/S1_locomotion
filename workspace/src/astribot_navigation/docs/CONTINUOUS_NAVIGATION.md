@@ -1,4 +1,45 @@
-# 连续曲线导航（2026-10-29）
+# 真机导航
+
+## 2026-11-20 网页移出控制链路
+
+控制链路改为 Nav2 的常规结构：`controller_server → /towergo/nav/cmd_vel_nav → 执行器 → SDK`。
+
+- **执行器**直接订阅 `cmd_vel_nav`。收到非零速度时自动开始一个内部任务，硬限速取 `navigation.yaml` 的 `max_speed`；每个目标的速度由网页写入 RPP 的 `desired_linear_vel`。0.3 s 收不到速度指令就原地保持（目标结束、取消、控制器卡住都走这一条）；保持稳定之前不接受新的运动。
+- **网页**只负责：选点、初始化定位、写入目标速度参数、通过 `NavigateToPose`/`FollowPath` 动作发目标和取消、显示状态。原来的速度转发、prepare 握手、浏览器心跳许可、Nav2 反馈超时判断全部删除。网页断开或卡顿不影响已提交的目标。
+- **停止**：取消 Nav2 目标，同时通过 `executor_control` 发带外保持指令；执行器在 1 s 内忽略尚未停下的控制器输出。普通停止、到达、失败都只做原地保持，不再调用厂商整机停止。整机停止只用于不可恢复的硬故障，触发后需要重启会话。
+- **运行监督**：传感器断流、map→base 变换超时或 AMCL 未激活、执行器故障或无控制权、Nav2 未激活，任一项持续 1 s 才取消目标；短暂抖动不再打断任务。
+
+## 2026-11-20 收敛为单一决策链
+
+此前规划、跟随、执行器、网页四层各自都能判定“不对”并自行停车、重转或重提目标。外层把内层的正常输出当成故障，每次修一处就多一道补丁。现在改为每层只有一个决策者，各层之间不再互相覆盖。
+
+| 层 | 唯一决策者 | 删除的内容 |
+|---|---|---|
+| 规划 | Nav2 `SmacPlanner2D`（点机器人代价搜索，膨胀半径不小于外接半径） | ExactGoalLattice、omni/ackermann 基元、转弯半径、直线优先捷径、规划后整机复核抛异常 |
+| 跟随 | Nav2 `RegulatedPurePursuitController`：路线在背后时原地转，否则前进并按曲率/障碍/接近减速，按整机轮廓预测碰撞 | RotationShim + DWB（441 条采样、6 个手调 critic），普通导航中的横移与倒车 |
+| 重试 | 行为树：1 Hz 重规划；失败后清局部代价地图、等待 2 s，最多 6 轮，用尽后 abort | 无限重试加 1 s 延迟 |
+| 执行器 | 按实际周期积分（单周期上限 50 ms），轴停止或反向时撤回该轴领先量 | 10 ms 积分上限（实际速度只剩 50–83%）、纯转向前的 0.15 s 冻结（turn_hold） |
+| 网页 | 只负责转发、显示，并在硬故障时停车 | 暂停→等待 2 s→重新提交的状态机；定位质量导致任务取消；自动 5 帧搜索恢复；运行中的 no-motion 保鲜调用；协方差静止重评估 |
+
+运行中只有以下硬条件会停车并结束任务（不会自动重提）：map→base TF 超时或 AMCL 未激活、传感器断流或 LIO 历史中断、SDK 反馈/控制权/执行器故障、Nav2 反馈超时或 abort、浏览器控制许可过期、手动停止。
+
+扫描与地图匹配质量、AMCL 协方差、amcl_pose 更新节奏改为只告警：定位初始化成功和提交目标前必须通过，运行中只显示。匹配失配会锁存，下一次提交前需要重新初始化。
+
+新会话会接管旧会话（`real_navigation/takeover.py`）。同一用户、同一 ROS Domain 下再次运行 `tg-navigation.sh` 时：先向旧会话发 SIGTERM，让它走正常收尾（执行器停车并交还控制权）；40 s 内未退出，就按“执行器 SIGINT → 旧主进程 SIGKILL → 其余进程组 SIGINT/SIGKILL”的顺序清理。会话自有的残留进程（带 `__ns:=/towergo/nav`、`navigation_fastlio`、`navigation_dual_adapter`、`real_navigation.executor` 等标记）也一并清理；Livox 驱动等共享进程不受影响。锁文件 `/tmp/towergo-navigation-<uid>-<domain>.lock` 记录当前会话的 PID 和目录。正常 Ctrl+C 退出时，执行器最多等 8 s，其余进程各等 5 s，超时后升级为 SIGTERM/SIGKILL。
+
+到点容差从 5 cm / 3° 放宽到 0.10 m / 0.10 rad，与 AMCL 自身的抖动量级相匹配。小位移微调（Nudge）的横移能力与容差规则不变。ExactGoalLattice、StopTurn 等插件仍然编译，但不再被选用。
+
+## 2026-11-19 全向导航与网页微调（历史）
+
+普通导航由 Smac 的全向运动基元规划路线，DWB 根据当前机身轮廓、前后雷达和地图选择速度。行为树每秒检查路线，有效路线持续跟随，路线无效时重新规划，最长每 30 秒更新一次。
+
+2026-11-20 第二次调整：关闭 lattice 的 `allow_reverse_expansion`。会话 navigation_20261120_000733 的 6 条全局路径都以 0.7 m 倒车钩子开头（首段朝向与车头相差约 180°，0.7 m 内路径朝向转约 100°），RotationShim 每次重规划都朝新的起点朝向重转，机器人只在约 1.6 m 范围内打转。全向基元本身能横移，不再需要倒车起步。同次加入静止时的 AMCL 无运动更新请求：底盘停住后 AMCL 因 update_min_d/update_min_a 不再发布位姿，`amcl_update_expected_ok` 变假，会话以"等待扫描与定位变换恢复"反复暂停；现在静止且传感器健康时每 0.8 秒请求一次 `/towergo/nav/request_nomotion_update`，不伪造位姿。
+
+全局 costmap 只用静态地图和膨胀层，前后雷达的实时障碍只进滚动的局部 costmap。原因：障碍点云去掉了地面点，空地上没有射线能清除已标记格子，固定的全局地图里误检点长期残留，使路线被判无效并反复绕路。Smac cost_penalty 由 3.0 降为 2.0。代价：全局规划不再主动绕开地图外的新障碍，由 DWB 在局部 costmap 内避让或停车；若长期堵住，需更新地图。手动微调仍跟随指定的直线或原地转角，保持最初的里程计目标。
+
+网页速度顺序为前进、横移、转向。平移合速度受页面设定限制，横移上限 0.15 m/s，倒车上限 0.10 m/s（2026-11-20 由 0.05/0.03 提高；回退恢复仍为 0.03 m/s）。FollowPath 为 RotationShim 包 DWB：路线方向与车头偏差 >0.6 rad 时先以 0.3 rad/s 原地转到 0.15 rad 内，再交给 DWB。原因：会话 navigation_20261119_235355_0549a9 起步背对路线约 150°，DWB 在慢横移、慢倒车和转向间来回切换，95 s 未离开 6 cm 范围后报 Failed to make progress。诊断录包新增局部 costmap、机身轮廓、全局路径和前后障碍点云。普通目标容差为 5 cm、3°，小位移微调使用相应的更小容差。
+
+## 2026-10-29 连续曲线导航
 
 用户已明确允许边走边转，以连续移动优先，替代原停车转向策略。真机/录包入口当前选择 ExactGoalLattice + Nav2 RegulatedPurePursuitController + SimpleGoalChecker。保持静态地图、轮廓/padding、定位模型和质量判据，默认0.05 m/s、原有速度上限不变。
 
@@ -31,3 +72,15 @@ localhost Domain128，实际Nav2规划器/控制器，理想底盘，无SDK：�
 隔离开放场景真实Nav2/RPP：9次路径更新、361运行采样中零线速度0次、取消停车通过，包含532个v/w同时非零的仿真采样；未连接SDK。证据wide_turn_curved_20261029。226项回归通过，另新增起点阻挡保护测试通过，C++几何CTest1/1及插件重新编译安装成功。真实路线仍需现场验收。
 
 最新：2026-10-29 起步复核修复及安全回退见 RECOVERY_BACKUP.md。膨胀默认0.85m（此前0.65m未覆盖外接角），完整边界和1m规划基元保留。导航失败可在确认停稳、后方静态与实时云检查通过后回退0.15m再规划，最多两次；实际接触/数据失效不盲目倒车。
+
+## 2026-11-05 原地转向回退规划
+
+用户要求窄处可原地调向。每次重规划先用原 ackermann 弧线基元（GridBased，行为不变）；仅当无弧线路径时，Fallback 再调用 InPlaceTurn（同半径 diff 基元 = 同组弧线 + ±22.5° 原地转），死胡同掉头、过窄转角由此可解。两者参数相同，均经 ExactGoalLattice 完整轮廓重查。
+
+- 不直接把主规划换成 diff：Smac 只在 16 个航向格点检查原地转的碰撞，格点之间机身角可扫进墙；完整重查会拒绝这种路径，紧 L 角因此从“弧线可解”退化为无路径。
+- InPlaceTurn 单独一个 planner_server（命名空间 /towergo/nav/inplace，独立 lifecycle manager 和同参数静态全局 costmap），由 navigation.xml 的 server_name 指向。原因是 Humble Smac 的 motion_table/距离启发表是进程级 static，两个 lattice 插件同进程会互相覆盖（实测死胡同同进程回退失败、分进程成功）。
+- RPP 控制器、执行器、速度/领先预算均未改动；原地转由 RPP rotate_to_heading 执行（0.3 rad/s 上限）。
+
+隔离 Domain128 理想底盘、真实 Smac+RPP、无 SDK（证据 inplace_turn_fallback_20261105）：死胡同 1.5 m 走廊掉头，原方案无路径→回退方案成功（InPlaceTurn 8/90 次）；1.2 m 紧 L 角，成功，InPlaceTurn 4/124 次；开阔场景仅用 GridBased，与原方案一致。三者机身轮廓与障碍格零交叠，终点误差 ≤0.15 m / 0.075 rad。真实 launch 参数下 inplace 进程加载 diff 基元、订阅 /towergo/nav/map 并与主栈一样等待 tg_nav_map TF。未做完整 bt_navigator 联调和真机验收。
+
+已知限制（原有）：ExactGoalLattice 以起点→终点直线方向作为到达朝向，窄死胡同里斜向目标可能因到达姿态放不下而无路径。

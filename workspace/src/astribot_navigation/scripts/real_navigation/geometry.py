@@ -2,6 +2,7 @@
 from collections import deque
 import copy
 from mapping_slice import Poses
+from .ground import height_above_ground
 import math
 import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
@@ -128,14 +129,20 @@ class Geometry:
         for box in self.config.get('self_filter_boxes',[]):
             self_points |= np.all((base>=box['min'])&(base<=box['max']),axis=1)
         base=base[(radius>=.15)&(radius<=20)&~self_points]
-        world=base @ pose[:3,:3].T+pose[:3,3]
-        keep=(world[:,2]>=self.config['obstacle_min_height'])&(world[:,2]<=self.config['obstacle_max_height'])
+        if 'ground_z_in_base' in self.config:
+            nominal=self.config['ground_z_in_base']['back' if rear else 'front']
+            heights=height_above_ground(base,nominal)
+            slice_center=self.config['ground_slice_height']
+        else:
+            heights=base @ pose[2,:3]+pose[2,3]
+            slice_center=self.config['slice_height']
+        keep=(heights>=self.config['obstacle_min_height'])&(heights<=self.config['obstacle_max_height'])
         origin=self.base_lidar[:3,3].copy()
         if rear:
             origin += self.base_lidar[:3,:3] @ np.asarray(self.config['rear_origin_in_front'])
         obstacle=base[keep]-origin
-        # Height referenced to initial base plane; source map slice height is a config snapshot.
-        selected=abs(world[:,2]-self.config['slice_height'])<=self.config['slice_thickness']/2
+        # Filter by height without changing the physical XYZ used for ray tracing.
+        selected=abs(heights-slice_center)<=self.config['slice_thickness']/2
         scan=base[selected]-self.base_lidar[:3,3]
         ranges=np.linalg.norm(scan[:,:2],axis=1)
         angles=np.arctan2(scan[:,1],scan[:,0])

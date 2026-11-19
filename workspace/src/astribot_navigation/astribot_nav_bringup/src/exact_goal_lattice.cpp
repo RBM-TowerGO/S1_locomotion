@@ -27,6 +27,9 @@ public:
     const auto key=name+".prefer_straight_route";
     if(!node->has_parameter(key))node->declare_parameter<bool>(key,true);
     prefer_straight_=node->get_parameter(key).as_bool();
+    const auto omni_key=name+".holonomic";
+    if(!node->has_parameter(omni_key))node->declare_parameter<bool>(omni_key,false);
+    holonomic_=node->get_parameter(omni_key).as_bool();
     costmap_ros_ = costmap_ros;
     nav2_smac_planner::SmacPlannerLattice::configure(parent, name, tf, costmap_ros);
   }
@@ -47,7 +50,27 @@ public:
     };
     const towergo_route::Pose from{start.pose.position.x,start.pose.position.y,tf2::getYaw(start.pose.orientation)};
     const towergo_route::Pose to{goal.pose.position.x,goal.pose.position.y,tf2::getYaw(goal.pose.orientation)};
+    const double distance=std::hypot(to.x-from.x,to.y-from.y);
+    // Prefer the direct line whenever the whole swept footprint is free. The
+    // omni lattice otherwise opens with a 60-100 deg S-shaped swerve even in
+    // open space; DWB then has to chase a moving tangent and the robot
+    // alternates rotate/translate (sessions 20261120_000733/011340).
+    // `straight` checks the rotation into the heading, the run, and the final
+    // turn onto the goal yaw, so a direct line is never a clearance shortcut.
     auto straight=prefer_straight_?towergo_route::straight(from,to,free):std::vector<towergo_route::Pose>{};
+    const double forward=(to.x-from.x)*std::cos(from.yaw)+(to.y-from.y)*std::sin(from.yaw);
+    const bool lateral=std::abs(forward)<=.02 && std::abs(towergo_route::angle(to.yaw-from.yaw))<=.05;
+    if (holonomic_ && (distance<=.50 || lateral) && towergo_route::segment(from,to,free)) {
+      // The local controller clips the global path to its rolling window.
+      // Keep intermediate poses visible even on a long lateral segment.
+      straight.clear();
+      const int steps=std::max(1,static_cast<int>(std::ceil(distance/map->getResolution())));
+      const double turn=towergo_route::angle(to.yaw-from.yaw);
+      for (int i=0;i<=steps;++i) {
+        const double t=static_cast<double>(i)/steps;
+        straight.push_back({from.x+t*(to.x-from.x),from.y+t*(to.y-from.y),from.yaw+t*turn});
+      }
+    }
     if (!straight.empty()) {
       nav_msgs::msg::Path path;path.header=goal.header;
       for (auto p:straight) {
@@ -57,16 +80,24 @@ public:
       }
       return path;
     }
-    // Obstacle detours still use the footprint-aware lattice, but the user's
-    // terminal yaw is excluded from translation planning.
+    // The omni lattice plans directly to the requested yaw. The legacy
+    // forward-only profile separates the arrival heading from the final turn.
     auto arrival=goal;
     tf2::Quaternion arrival_q;
     arrival_q.setRPY(0.,0.,std::atan2(to.y-from.y,to.x-from.x));
-    arrival.pose.orientation=tf2::toMsg(arrival_q);
+    if (!holonomic_) arrival.pose.orientation=tf2::toMsg(arrival_q);
     lock.unlock();
     auto plan = nav2_smac_planner::SmacPlannerLattice::createPlan(start, arrival);
     if (plan.poses.empty()) {return plan;}
     lock.lock();
+    // The lattice begins at a quantized cell and heading. Replaying that yaw
+    // every replan pulls a chassis midway through a turn back toward its bin.
+    // The full-footprint pass below checks the connection from the actual start.
+    if (holonomic_ && plan.poses.size()>1) {
+      const auto & first=plan.poses.front().pose.position;
+      if (std::hypot(first.x-from.x,first.y-from.y)<=map->getResolution())
+        plan.poses.front()=start;
+    }
     const auto & last = plan.poses.back().pose;
     const double dx = goal.pose.position.x - last.position.x;
     const double dy = goal.pose.position.y - last.position.y;
@@ -120,6 +151,7 @@ public:
   }
 
 private:
+  bool holonomic_=false;
   bool prefer_straight_=true;
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
 };

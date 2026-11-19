@@ -4,11 +4,25 @@ All points and poses are measured at the same scan reference time. Unknown
 cells and the interiors of thick walls are never successful endpoint matches.
 """
 from collections import deque
+import ctypes
 import math
 import time
 import numpy as np
 from scipy.ndimage import binary_dilation, distance_transform_edt
 from scipy.optimize import minimize
+
+
+try:
+    _ray_fractions = ctypes.CDLL('libtowergo_ray_matcher.so').towergo_ray_fractions
+except OSError:
+    _ray_fractions = None  # Standalone map tools also run without the ROS overlay.
+else:
+    _double = np.ctypeslib.ndpointer(np.float64, flags='C_CONTIGUOUS')
+    _mask = np.ctypeslib.ndpointer(np.bool_, ndim=2, flags='C_CONTIGUOUS')
+    _int = ctypes.c_int
+    _ray_fractions.argtypes = [_double, _double, _int, _double, _int, _double, _double,
+                               _double, _double, ctypes.c_double, _int, _int, _mask, _mask, _double]
+    _ray_fractions.restype = None
 
 
 def angle(value):
@@ -23,7 +37,8 @@ def transform(points, pose):
 class MapMatcher:
     def __init__(self, grid, laser_origin=(0., 0.)):
         self.grid = grid
-        self.origin = np.asarray(laser_origin, float)
+        self.origin = np.ascontiguousarray(laser_origin, dtype=float)
+        self.ray_steps = np.arange(grid.resolution/2, 12., grid.resolution/2)
         # Only occupied cells touching observed free space are wall boundaries.
         boundary = grid.occupied & binary_dilation(grid.free)
         self.distance = (distance_transform_edt(~boundary)*grid.resolution
@@ -58,19 +73,7 @@ class MapMatcher:
         quadrants = len(np.unique(np.floor((a+math.pi)/(math.pi/2)).astype(int) % 4))
         ray_conflict = 0.; ray_known = 1.; ray_occupied = 0.
         if rays:
-            # Sample at half-cell spacing, including thin walls; omit endpoint
-            # vicinity to tolerate discretization, never the whole ray interior.
-            sampled = points[::max(1, len(points)//72)]
-            delta = sampled-self.origin
-            length = np.linalg.norm(delta, axis=1)
-            steps = np.arange(self.grid.resolution/2, 12., self.grid.resolution/2)
-            valid = (steps[None, :] < length[:, None]-.15)
-            local = self.origin+delta[:, None, :]/length[:, None, None]*steps[None, :, None]
-            k, o, _ = self.lookup(transform(local.reshape((-1, 2)), pose))
-            k = k.reshape(valid.shape); o = o.reshape(valid.shape)
-            ray_conflict = float(np.mean(np.any(o & valid, axis=1)))
-            ray_known = float(np.sum(k & valid)/max(1, np.sum(valid)))
-            ray_occupied = float(np.sum(o & valid)/max(1, np.sum(valid)))
+            ray_conflict, ray_known, ray_occupied = self.ray_metrics(points, pose)
         reasons = []
         if len(points) < 100: reasons.append('有效扫描点不足 100')
         if quadrants < 3: reasons.append('扫描方位覆盖不足')
@@ -88,6 +91,26 @@ class MapMatcher:
                     points=len(points), quadrants=quadrants, known_fraction=float(np.mean(known)),
                     match_fraction=float(np.mean(d <= .2)), median_distance_m=float(np.median(d)),
                     ray_conflict_fraction=ray_conflict, ray_known_fraction=ray_known, ray_occupied_fraction=ray_occupied, score=score)
+
+    def ray_metrics(self, points, pose):
+        sampled = np.ascontiguousarray(points[::max(1, len(points)//72)])
+        delta = sampled-self.origin
+        length = np.linalg.norm(delta, axis=1)
+        steps = self.ray_steps
+        if _ray_fractions is not None:
+            grid = self.grid
+            result = np.empty(3)
+            _ray_fractions(sampled, length, len(sampled), steps, len(steps), self.origin,
+                           np.ascontiguousarray(pose, dtype=float), grid.origin, grid.rotation,
+                           grid.resolution, grid.width, grid.height, grid.free, grid.occupied, result)
+            return tuple(map(float, result))
+        valid = steps[None, :] < length[:, None]-.15
+        local = self.origin+delta[:, None, :]/length[:, None, None]*steps[None, :, None]
+        known, occupied, _ = self.lookup(transform(local.reshape((-1, 2)), pose))
+        known = known.reshape(valid.shape); occupied = occupied.reshape(valid.shape)
+        count = max(1, np.sum(valid))
+        return (float(np.mean(np.any(occupied & valid, axis=1))),
+                float(np.sum(known & valid)/count), float(np.sum(occupied & valid)/count))
 
     def search(self, frames, anchor, deadline, cancelled=lambda: False):
         """Coarse multi-hypothesis search, bounded refinement and five-frame proof."""

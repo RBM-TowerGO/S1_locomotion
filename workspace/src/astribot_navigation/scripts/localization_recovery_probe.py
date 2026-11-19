@@ -50,6 +50,6 @@ def main():
             time.sleep(.2)
         Path(args.output).write_text(json.dumps(rows,ensure_ascii=False,indent=2))
         print('FINAL',s['status'],flush=True)
-        if any(x['busy'] or x['command_velocity']!=[0.,0.] for x in rows):raise RuntimeError('Unexpected motion task during localization-only experiment')
+        if any(x['busy'] or x['command_velocity'] not in ([0.,0.],[0.,0.,0.]) for x in rows):raise RuntimeError('Unexpected motion task during localization-only experiment')
     finally:n.destroy_node();rclpy.shutdown()
 if __name__=='__main__':main()

@@ -8,7 +8,7 @@ import numpy as np
 import yaml
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'scripts'),str(ROOT/'towergo_real')]
-from real_navigation.core import Lease,Drive,speed,limited,controller_parameters,validate_config,BROWSER_LEASE_SECONDS
+from real_navigation.core import Lease,Drive,speed,limited,controller_parameters,validate_config,BROWSER_LEASE_SECONDS,relative_goal,at_goal
 from real_navigation.geometry import Geometry,matrix,safe_pose
 
 
@@ -61,25 +61,35 @@ class NavigationTests(unittest.TestCase):
             with self.assertRaises(ValueError):speed(x)
 
     def test_zero_blocks_rotations_and_goal(self):
-        self.assertEqual(limited(.2,.1,0),(0,0))
+        self.assertEqual(limited(.2,0,.1,0),(0,0,0))
         with self.assertRaises(ValueError):controller_parameters(0)
 
     def test_small_speed_no_internal_floor(self):
         p=controller_parameters(.001)
-        self.assertLessEqual(p['FollowPath.min_approach_linear_velocity'],.001)
-        self.assertLessEqual(p['FollowPath.regulated_linear_scaling_min_speed'],.001)
+        self.assertEqual(p['Nudge.desired_linear_vel'],.001)
+        self.assertEqual(p['FollowPath.max_vel_x'],.001)
+        self.assertEqual(p['FollowPath.max_speed_xy'],.001)
 
     def test_curvature_preserved(self):
-        v,w=limited(.6,.3,.3)
+        v,_,w=limited(.6,0,.3,.3)
         self.assertAlmostEqual(v/w,2)
         self.assertAlmostEqual(v,.3)
         # Yaw-rate cap still applies and preserves curvature.
-        v,w=limited(.3,.9,.3)
+        v,_,w=limited(.3,0,.9,.3)
         self.assertAlmostEqual(v/w,1/3)
         self.assertAlmostEqual(w,.3)
 
-    def test_reverse_rejected(self):
-        with self.assertRaises(ValueError):limited(-.1,0,.3)
+    def test_reverse_speed_limited(self):
+        self.assertEqual(limited(-.1,0,0,.3),(-.1,0.,0.))
+        self.assertEqual(limited(-.2,0,0,.3),(-.10,0.,0.))
+
+    def test_small_relative_goal_in_turned_body_frame(self):
+        start=[3.,4.,math.pi/2]
+        goal=relative_goal(start,0.,.02,0.)
+        self.assertTrue(np.allclose(goal,[2.98,4.,math.pi/2]))
+        self.assertFalse(at_goal(start,goal,(.005,math.radians(3))))
+        self.assertTrue(at_goal([2.984,4.,math.pi/2],goal,(.005,math.radians(3))))
+        self.assertTrue(at_goal([0.,0.,-math.pi+.01],[0.,0.,math.pi-.01],(.05,.05)))
 
     def test_owner_exclusion(self):
         lease=Lease();lease.begin('a'*32,0)
@@ -136,7 +146,7 @@ class NavigationTests(unittest.TestCase):
         target=d.target[:]
         for now in (.02,.03,.04):
             b.now=now;d.permit("t",now);d.command("t",0.,0.,now)
-            self.assertEqual(d.tick(now),(0.,0.))
+            self.assertEqual(d.tick(now),(0.,0.,0.))
             self.assertEqual(d.target,target)
             self.assertEqual(b.sent[-1],target)
         self.assertEqual(b.stops,0);self.assertEqual(d.task,"t");self.assertIsNone(d.fault)

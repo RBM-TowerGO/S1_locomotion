@@ -12,13 +12,16 @@ def test_both_costmaps_use_only_saved_map(replay):
     params=nav_params(config,Path('/tmp/unchanged-map.yaml'),replay)['towergo']['nav']
     for name in ('global_costmap','local_costmap'):
         p=params[name][name]['ros__parameters']
-        assert p['plugins']==['static_layer','inflation_layer']
-        assert 'obstacle_layer' not in p and 'voxel_layer' not in p
+        expected=(['static_layer','inflation_layer'] if name=='global_costmap'
+                  else ['static_layer','obstacle_layer','inflation_layer'])
+        assert p['plugins']==expected
+        if name=='global_costmap':
+            assert 'obstacle_layer' not in p and 'voxel_layer' not in p
         assert p['static_layer']['map_topic']=='/towergo/nav/map'
         assert p['inflation_layer']['inflation_radius']==.75
         assert p['footprint_padding']==config['footprint_padding']
         assert p['track_unknown_space']
-    assert params['controller_server']['ros__parameters']['FollowPath']['use_collision_detection']
+    assert params['controller_server']['ros__parameters']['FollowPath']['sim_time']==config['collision_time_horizon']
     assert params['map_server']['ros__parameters']['yaml_filename']=='/tmp/unchanged-map.yaml'
     assert params['amcl']['ros__parameters']['scan_topic']=='/towergo/nav/scan'
 
@@ -28,25 +31,40 @@ def test_turn_profile_uses_configured_turning_radius_primitives():
     config=yaml.safe_load((ROOT/'scripts/real_navigation/navigation.yaml').read_text())
     radius=config['planning_turning_radius']
     params=nav_params(config,Path('/tmp/map.yaml'),False)['towergo']['nav']
-    planner=params['planner_server']['ros__parameters']['GridBased']
-    assert '/%sm_turning_radius/ackermann/'%format(radius,'g') in planner['lattice_filepath']
-    assert planner['prefer_straight_route'] is False and planner['smooth_path'] is False
+    ps=params['planner_server']['ros__parameters']
+    assert ps['planner_plugins']==['GridBased']
+    planner=ps['GridBased']
+    assert planner['holonomic'] and not planner['allow_reverse_expansion']
+    assert planner['allow_unknown'] is False and planner['smooth_path'] is False
     assert set(map(tuple,config['footprint']))==set(map(tuple,config['self_filter']))
     path=Path(planner['lattice_filepath'])
+    assert path.parent.name=='omni'
     if path.exists():
-        assert json.loads(path.read_text())['lattice_metadata']['turning_radius']==radius
+        primitives=json.loads(path.read_text())
+        assert primitives['lattice_metadata']['turning_radius']==radius
+        ends=[p['poses'][-1] for p in primitives['primitives'] if p['start_angle_index']==0]
+        assert any(x==0 and y>0 and yaw==0 for x,y,yaw in ends)
+        assert any(x==0 and y<0 and yaw==0 for x,y,yaw in ends)
+        assert any(x==0 and y==0 and yaw!=0 for x,y,yaw in ends)
+
+
+def test_tree_uses_omni_planner_on_every_replan():
+    import xml.etree.ElementTree as ET
+    tree=ET.parse(ROOT/'scripts/real_navigation/navigation.xml')
+    assert {n.get('planner_id') for n in tree.findall('.//ComputePathToPose')}=={'GridBased'}
+    assert tree.find('.//FollowPath').get('controller_id')=='FollowPath'
 
 
 def test_start_inside_enlarged_clearance_is_rejected_before_executor_prepare():
     import ast
     from types import SimpleNamespace as S
     import numpy as np
-    from real_navigation.core import speed,controller_parameters
+    from real_navigation.core import speed,controller_parameters,GOAL_XY,GOAL_YAW
     from real_navigation.geometry import safe_pose
     tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
     cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
     fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='begin')
-    ns=dict(speed=speed,controller_parameters=controller_parameters,safe_pose=safe_pose)
+    ns=dict(speed=speed,controller_parameters=controller_parameters,safe_pose=safe_pose,GOAL_XY=GOAL_XY,GOAL_YAW=GOAL_YAW)
     exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'begin','exec'),ns)
     config=yaml.safe_load((ROOT/'scripts/real_navigation/navigation.yaml').read_text())
     grid=S(origin=np.array([0.,0.,0.]),rotation=np.eye(2),resolution=.05,width=200,height=200,free=np.ones((200,200),bool))

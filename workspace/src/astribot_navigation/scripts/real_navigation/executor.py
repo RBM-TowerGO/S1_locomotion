@@ -144,33 +144,48 @@ def main():
         while backend.last_feedback is None and time.monotonic()<deadline:
             rclpy.spin_once(node,timeout_sec=.05)
         drive = Drive(backend,config,time.monotonic())
+        # Nav2's controller_server is the only velocity source. Each nonzero
+        # command opens (or continues) an executor task at the configured
+        # hard speed cap; the per-goal speed is RPP's desired_linear_vel.
+        # Drive.tick() stops the chassis 0.3 s after commands stop arriving.
+        blocked_until=-math.inf;tasks=0
+        def velocity(msg):
+            nonlocal tasks
+            try:
+                now=time.monotonic()
+                if now<blocked_until or drive.fault:return
+                if any(v!=0 for v in (msg.linear.z,msg.angular.x,msg.angular.y)):
+                    raise ValueError('只支持平面底盘指令')
+                v,vy,w=msg.linear.x,msg.linear.y,msg.angular.z
+                if drive.task is None:
+                    # Zero commands never start motion; a settling hold must
+                    # finish before a new task can begin.
+                    if drive.holding or not (v or vy or w):return
+                    tasks+=1;drive.prepare('nav2-%d'%tasks,config['max_speed'])
+                drive.permit(drive.task,now)
+                drive.command(drive.task,v,w,now,vy=vy)
+            except Exception as exc:
+                drive.stop(str(exc))
+        from geometry_msgs.msg import Twist
+        node.create_subscription(Twist,'cmd_vel_nav',velocity,10)
+        # Out-of-band stop requests from the web page (not a velocity path).
         def control(msg):
-            nonlocal last_sequence
+            nonlocal last_sequence,blocked_until
             try:
                 data = json.loads(msg.data)
                 now = time.monotonic()
-                if data['sequence'] <= last_sequence or not 0 <= now-data['sent'] < .2:
+                if data['sequence'] <= last_sequence or not 0 <= now-data['sent'] < .5:
                     return
                 last_sequence = data['sequence']
+                # Ignore in-flight controller commands until Nav2 has cancelled.
+                blocked_until=now+1.
                 if data['op']=='stop':
                     drive.stop()
                 elif data['op']=='cancel_stationary':
-                    span=settling.span(now)
-                    confirmed=bool(span is not None and len(span)==3 and math.hypot(span[0],span[1])<.005 and span[2]<.01)
-                    drive.cancel_stationary(now,confirmed)
-                elif data['op']=='prepare':
-                    drive.prepare(data['task'],data['speed'])
-                    drive.permit(data['task'],now)
-                    drive.command(data['task'],0.,0.,now)
-                elif data['op']=='backup_command':
-                    drive.permit(data['task'],now)
-                    drive.backup_command(data['task'],data['v'],now)
-                elif data['op']=='command':
-                    drive.permit(data['task'],now)
-                    drive.command(data['task'],data['v'],data['w'],now)
+                    drive.cancel_stationary(now,True)
             except Exception as exc:
                 drive.stop(str(exc))
-        node.create_subscription(String,'executor_control',control,1)
+        node.create_subscription(String,'executor_control',control,10)
         last_status = 0.
         settling=Window(.15)
         last_settling_feedback=None

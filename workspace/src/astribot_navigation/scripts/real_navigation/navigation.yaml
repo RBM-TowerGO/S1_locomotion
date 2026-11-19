@@ -20,13 +20,17 @@ self_filter: [[-0.40, -0.40], [0.50, -0.40], [0.50, 0.40], [-0.40, 0.40]]
 # Relaxed for tight spaces (user request 2026-11-05): 0.05 -> 0.02 m, 1.0 -> 0.5 m.
 footprint_padding: 0.02
 inflation_radius: 0.75
-planning_turning_radius: 0.5
 collision_time_horizon: 1.5
 # AMCL scan source. lio_body: FAST-LIO's deskewed body cloud, published with
 # its pose (no pose wait). raw_pair: previous per-lidar Python deskew path.
 # Per-lidar obstacle clouds for retreat checks are produced in both modes.
 scan_input: lio_body
-slice_height: 0.054
+# Nominal observed floor z per input in chassis coordinates, used as a fit prior.
+# Back/forward returns have a small relative vertical offset on S1B.
+ground_z_in_base: {front: -0.11, back: -0.13}
+# Reproduce the original map's front-lidar-height slice relative to local ground.
+ground_slice_height: 0.164
+slice_height: 0.054  # historical fixed-origin configs
 slice_thickness: 0.10
 obstacle_min_height: 0.02
 obstacle_max_height: 2.0

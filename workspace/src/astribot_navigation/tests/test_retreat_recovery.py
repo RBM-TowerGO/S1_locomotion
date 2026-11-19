@@ -28,7 +28,7 @@ def test_wrong_direction_or_invalid_feedback_aborts(feedback):
 
 
 def test_recovery_has_absolute_deadline():
-    with pytest.raises(RuntimeError,match='12 秒'):Retreat(0).step(12,[0,0,0],False)
+    with pytest.raises(TimeoutError,match='12 秒'):Retreat(0).step(12,[0,0,0],False)
 
 
 def scene():
@@ -50,6 +50,21 @@ def test_backing_checks_whole_sweep_and_live_obstacles():
     clouds[1]=np.empty((0,3));assert not check(c,g,clouds)[0]
 
 
+def test_reverse_arc_keeps_obstacles_near_the_outer_swept_corner():
+    config,grid,clouds=scene()
+    twist=(-.03,.10,.30)
+    args=(grid,[0,0,0],config['footprint'],config['footprint_padding'],.045,clouds)
+    assert backup_clearance(*args,twist=twist)==(True,None)
+    # At the end of the arc this corner is outside the initial footprint.
+    w=twist[2];yaw=w*1.5
+    centre=np.array([(twist[0]*math.sin(yaw)+twist[1]*(math.cos(yaw)-1))/w,
+                     (twist[0]*(1-math.cos(yaw))+twist[1]*math.sin(yaw))/w])
+    c,s=math.cos(yaw),math.sin(yaw)
+    corner=np.max(config['footprint'],axis=0)-.015
+    clouds[1][0,:2]=centre+np.array([[c,-s],[s,c]])@corner
+    assert not backup_clearance(*args,twist=twist)[0]
+
+
 def test_recovery_only_for_navigation_failures_and_bounded_attempts():
     assert recoverable_navigation_failure(6,'路径不满足完整机身避障余量',0)
     assert recoverable_navigation_failure(6,'控制器预测到前方碰撞',1)
@@ -59,16 +74,16 @@ def test_recovery_only_for_navigation_failures_and_bounded_attempts():
     assert not recoverable_navigation_failure(6,'定位失效',0)
 
 
-def test_signed_velocity_only_through_explicit_bounded_recovery_command():
+def test_reverse_speed_is_bounded_in_normal_and_recovery_commands():
     from test_drive_governor import setup
     p,d=setup()
-    with pytest.raises(ValueError):limited(-.03,0,.05)
-    with pytest.raises(ValueError):d.command('task',-.03,0,0)
+    assert limited(-.04,0,0,.05)==(-.04,0,0)
+    assert d.command('task',-.03,0,0)
     for bad in [-.031,.001,float('nan')]:
         with pytest.raises(ValueError):d.backup_command('task',bad,0)
     for _ in range(500):
         p.advance(.01);d.permit('task',p.now);assert d.backup_command('task',-.03,p.now)
-        v,w=d.tick(p.now);assert -.03<=v<=0 and w==0
+        v,_,w=d.tick(p.now);assert -.03<=v<=0 and w==0
         assert d.tracking['position_error_m']<=.1000001
     assert p.p[0]<-.1 and d.fault is None
     d.suspend(p.now,'用户取消');assert not d.backup_command('task',-.03,p.now)
@@ -98,9 +113,11 @@ def test_dispatch_requires_fresh_feedback_clear_rear_and_stop_before_resubmit():
 @pytest.mark.parametrize('blocked,stale',[(True,False),(False,True)])
 def test_dispatch_does_not_reverse_without_clearance_or_fresh_feedback(blocked,stale):
     tick,w,sent,stops,goals=coordinator();w.retreat.phase='backing';w.retreat.origin=[0,0,0]
+    pauses=[];w.pause_navigation=lambda now,why,**kw:pauses.append((why,kw))
     if blocked:w.retreat_clearance=lambda d:(False,'后方有障碍')
     tick(w,.4 if stale else .1)
-    assert stops and not sent and not goals
+    assert len(pauses)==1 and not stops and not sent and not goals
+    if blocked:assert pauses[0][1]['reverse']==(.15,0.,0.,0.)
 
 
 def test_live_clearance_uses_full_cloud_not_decimated_display_and_rejects_old_data():

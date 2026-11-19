@@ -34,11 +34,12 @@ class Sensors:
         from mapping_slice import raw_points
         self.worker=CloudWorker(self.geometry_snapshot,raw_points,self.metrics)
         node.create_timer(.01,self.flush)
+        self.fused_scans=deque(maxlen=10)
         self.latest_scan=None
         self.latest_scan_source_stamp=None;self.latest_scan_stamp_ns=None
         self.recovering_until=0.
         self.received={};self.stamps={};self.frames={};self.error=None;self.last_pose=None;self.last_pose_stamp_ns=None
-        self.planar_speed=0.;self.velocity=[0.,0.];self.scans={};self.obstacles={};self.recovery_clouds={}
+        self.planar_speed=0.;self.velocity=[0.,0.,0.];self.scans={};self.obstacles={}
         self.scan_history={k:deque(maxlen=6) for k in ('front','back')}
         self.odom_pub=node.create_publisher(Odometry,NS+'odom',10)
         self.scan_pub=node.create_publisher(LaserScan,NS+'scan',qos_profile_sensor_data)
@@ -134,8 +135,9 @@ class Sensors:
             self.worker.wake()
             if t is None:return
             if epoch!=self.geometry.continuity_epoch:
+                self.fused_scans.clear()
                 self.settling.rows.clear()
-                self.last_pose=None;self.latest_scan=None;self.scans={};self.obstacles={};self.recovery_clouds={}
+                self.last_pose=None;self.latest_scan=None;self.scans={};self.obstacles={}
                 self.latest_scan_source_stamp=None;self.latest_scan_stamp_ns=None
                 for history in self.scan_history.values():history.clear()
                 self.received.pop('scan',None)
@@ -145,8 +147,8 @@ class Sensors:
                 old_stamp,old=self.last_pose;dt=stamp-old_stamp
                 v=t[:3,:3].T @ (t[:3,3]-old[:3,3])/dt
                 w=Rotation.from_matrix(old[:3,:3].T@t[:3,:3]).as_rotvec()/dt
-                self.velocity=[float(v[0]),float(w[2])];self.planar_speed=float(np.linalg.norm(v[:2]))
-                self.settling.add(time.monotonic(),[self.planar_speed,abs(self.velocity[1])])
+                self.velocity=[float(v[0]),float(v[1]),float(w[2])];self.planar_speed=float(np.linalg.norm(v[:2]))
+                self.settling.add(time.monotonic(),[self.planar_speed,abs(self.velocity[2])])
             if self.last_pose is None:self.static.sendTransform(self.static_transforms)
             self.last_pose=(stamp,t)
             self.last_pose_stamp_ns=msg.header.stamp.sec*1000000000+msg.header.stamp.nanosec
@@ -155,7 +157,7 @@ class Sensors:
             out.pose.pose.position.x,out.pose.pose.position.y,out.pose.pose.position.z=map(float,t[:3,3])
             q=Rotation.from_matrix(t[:3,:3]).as_quat()
             out.pose.pose.orientation.x,out.pose.pose.orientation.y,out.pose.pose.orientation.z,out.pose.pose.orientation.w=map(float,q)
-            out.twist.twist.linear.x,out.twist.twist.angular.z=self.velocity
+            out.twist.twist.linear.x,out.twist.twist.linear.y,out.twist.twist.angular.z=self.velocity
             # Conservative nonzero estimates; no claim of calibrated covariance.
             out.pose.covariance=(np.eye(6)*.05).ravel().tolist();out.twist.covariance=(np.eye(6)*.05).ravel().tolist()
             self.odom_pub.publish(out);self.tf.sendTransform(self.tf_msg(t,FRAME['odom'],FRAME['base'],msg.header.stamp))
@@ -205,6 +207,7 @@ class Sensors:
         self.latest_scan=(stamp,scan_points(ranges).tolist())
         self.latest_scan_source_stamp=stamp;self.latest_scan_stamp_ns=ns
         self.scan_pub.publish(scan);self.received['scan']=time.monotonic();self.stamps['scan']=stamp
+        self.fused_scans.append((ns,stamp,self.received['scan'],self.latest_scan[1]))
         self.metrics.add('body_points',len(body))
         self.metrics.add('body_processing_ms',(time.monotonic()-begin)*1000)
         self.metrics.add('scan_source_age_s',now-stamp)
@@ -230,7 +233,6 @@ class Sensors:
                 source_stamp=rclpy.time.Time(nanoseconds=int(round(stamp*1e9))).to_msg()
                 header=Header();header.stamp=source_stamp;header.frame_id=FRAME[key]
                 self.cloud_pub[key].publish(point_cloud2.create_cloud_xyz32(header,points))
-                self.recovery_clouds[key]=(stamp,points)
                 self.obstacles[key]=(stamp,points[::max(1,len(points)//600)].tolist())
                 self.scans[key]=(stamp,ranges)
                 self.scan_history[key].append((stamp,ranges))
@@ -293,6 +295,7 @@ class Sensors:
             self.latest_scan=(reference_stamp,scan_points(merged).tolist())
             self.latest_scan_source_stamp=source_stamp;self.latest_scan_stamp_ns=reference_ns
             self.scan_pub.publish(scan);self.received['scan']=time.monotonic();self.stamps['scan']=source_stamp
+            self.fused_scans.append((reference_ns,source_stamp,self.received['scan'],self.latest_scan[1]))
             self.metrics.add('scan_source_age_s',now-source_stamp)
             self.metrics.add('scan_reference_age_s',now-reference_stamp)
             self.metrics.count('scan_published')

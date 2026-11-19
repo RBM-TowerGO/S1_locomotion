@@ -1,7 +1,6 @@
 """Owned process supervisor for live observation, validated driving, and bag replay."""
 import argparse
 import fcntl
-import copy
 import datetime
 import json
 import os
@@ -11,7 +10,8 @@ import sys
 import time
 import uuid
 import yaml
-from .core import validate_config,digest,costmap_inflation_radius,MAX_ANGULAR_SPEED
+from .core import (validate_config,digest,costmap_inflation_radius,GOAL_XY,GOAL_YAW,
+                   MAX_ANGULAR_SPEED)
 
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
@@ -35,31 +35,73 @@ def nav_params(config,mapfile,replay):
     rewrite(base)
     base['map_server']['ros__parameters'].update(yaml_filename=str(mapfile),frame_id='tg_nav_map')
     base['amcl']['ros__parameters'].update(update_min_d=config.get('amcl_update_min_d',0.),update_min_a=config.get('amcl_update_min_a',0.),transform_tolerance=.1,robot_model_type='towergo::LioPlanarMotionModel')
-    radius=float(config.get('planning_turning_radius',1.0))
-    if radius not in (.5,1.0):raise ValueError('当前运动基元支持 0.5 或 1.0 m 转弯半径')
-    planner=base['planner_server']['ros__parameters']['GridBased']
-    planner.update(lattice_filepath='/opt/ros/humble/share/nav2_smac_planner/sample_primitives/5cm_resolution/%sm_turning_radius/ackermann/output.json'%format(radius,'g'),
-                   prefer_straight_route=False,smooth_path=False,tolerance=.05)
-    cp=base['controller_server']['ros__parameters'];cp['FollowPath']['desired_linear_vel']=.05
-    cp['FollowPath']['max_allowed_time_to_collision_up_to_carrot']=config.get('collision_time_horizon',1.5)
+    inflation=costmap_inflation_radius(config)
+    ps=base['planner_server']['ros__parameters']
+    # Stock 2D planner: one cost-aware grid search, no motion primitives,
+    # turning radius, straight-line shortcut or post-hoc footprint rejection.
+    # The robot turns in place, so the path only needs to keep the centre out
+    # of inscribed cost; the controller checks the full rectangle.
+    ps['GridBased']=dict(plugin='nav2_smac_planner/SmacPlanner2D',tolerance=.10,
+                         downsample_costmap=False,downsampling_factor=1,allow_unknown=False,
+                         max_iterations=1000000,max_on_approach_iterations=1000,max_planning_time=2.0,
+                         cost_travel_multiplier=2.0,use_final_approach_orientation=False,
+                         smoother=dict(max_iterations=1000,w_smooth=.3,w_data=.2,tolerance=1e-10))
+    cp=base['controller_server']['ros__parameters']
+    horizon=config.get('collision_time_horizon',1.5)
+    cp['controller_plugins']=['FollowPath','Nudge']
+    # One controller owns path tracking: RPP turns in place when the path is
+    # behind, otherwise drives forward with curvature/obstacle/approach
+    # slow-down and a full-footprint collision projection. No lateral or
+    # reverse sampling, so the executor never sees sign-flipping vy/vx.
+    cp['FollowPath']=dict(
+        plugin='nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController',
+        desired_linear_vel=.05,  # Replaced per goal by controller_parameters().
+        lookahead_dist=.5,min_lookahead_dist=.3,max_lookahead_dist=.9,lookahead_time=1.5,
+        use_velocity_scaled_lookahead_dist=True,use_interpolation=True,
+        use_rotate_to_heading=True,rotate_to_heading_min_angle=.6,
+        rotate_to_heading_angular_vel=MAX_ANGULAR_SPEED,max_angular_accel=.6,
+        allow_reversing=False,goal_dist_tol=GOAL_XY,
+        use_collision_detection=True,max_allowed_time_to_collision_up_to_carrot=horizon,
+        use_regulated_linear_velocity_scaling=True,regulated_linear_scaling_min_radius=.9,
+        regulated_linear_scaling_min_speed=.03,
+        use_cost_regulated_linear_velocity_scaling=True,cost_scaling_dist=.6,cost_scaling_gain=1.,
+        inflation_cost_scaling_factor=5.,
+        min_approach_linear_velocity=.03,approach_velocity_scaling_dist=.6,
+        transform_tolerance=.3)
+    cp['Nudge']=dict(plugin='towergo::OmniController',desired_linear_vel=.05,collision_time_horizon=horizon)
+    # A 180 deg in-place turn at 0.3 rad/s takes ~11 s without XY progress.
+    cp['progress_checker'].update(required_movement_radius=.05,movement_time_allowance=20.)
     cp['odom_topic']='/towergo/nav/odom'
-    # Continuous curved following: normal path curvature must not trigger the
-    # stopped-corner state machine. Initial/terminal alignment remains allowed.
-    cp['FollowPath']['plugin']='nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController'
-    cp['FollowPath'].update(rotate_to_heading_angular_vel=MAX_ANGULAR_SPEED,max_angular_accel=MAX_ANGULAR_SPEED)
-    cp['FollowPath'].update(use_rotate_to_heading=True,rotate_to_heading_min_angle=.7,
-                           lookahead_dist=.5,use_velocity_scaled_lookahead_dist=False)
-    cp['goal_checker'].update(plugin='nav2_controller::SimpleGoalChecker')
+    cp['goal_checker'].update(plugin='nav2_controller::SimpleGoalChecker', stateful=False,
+                              xy_goal_tolerance=GOAL_XY,yaw_goal_tolerance=GOAL_YAW)
     for name in ('global_costmap','local_costmap'):
         p=base[name][name]['ros__parameters']
         p['footprint']=json.dumps(config['footprint']);p['footprint_padding']=config['footprint_padding']
         p['track_unknown_space']=True
-        # User-selected static-map navigation. Live scans remain localization/preview only.
-        p['plugins']=['static_layer','inflation_layer']
-        p.pop('obstacle_layer',None)
-        p.pop('voxel_layer',None)
         p['static_layer']={'plugin':'nav2_costmap_2d::StaticLayer','map_topic':'/towergo/nav/map','map_subscribe_transient_local':True}
-        p['inflation_layer'].update(inflation_radius=costmap_inflation_radius(config),cost_scaling_factor=5.)
+        p['inflation_layer'].update(inflation_radius=inflation,cost_scaling_factor=5.)
+        if name=='global_costmap':
+            # Static map only. The obstacle clouds exclude floor returns, so in
+            # open space no ray ever clears a marked cell; in this non-rolling
+            # map stray returns persisted, invalidated the path and forced
+            # detours. Live obstacles stay in the rolling local costmap.
+            p['plugins']=['static_layer','inflation_layer']
+            p.pop('obstacle_layer',None)
+            continue
+        p['plugins']=['static_layer','obstacle_layer','inflation_layer']
+        layer=p['obstacle_layer']=dict(plugin='nav2_costmap_2d::ObstacleLayer',observation_sources='front back')
+        # The bridge classifies physical returns relative to the nearby floor.
+        # Nav2's second height test runs in the global costmap frame. On a
+        # slope it could reject a valid low return, so leave that gate open.
+        relative_ground='ground_z_in_base' in config
+        if relative_ground:
+            layer['min_obstacle_height']=-1.e6
+            layer['max_obstacle_height']=1.e6
+        for sensor in ('front','back'):
+            layer[sensor]=dict(topic='/towergo/nav/obstacles/'+sensor,data_type='PointCloud2',
+                               marking=True,clearing=True,obstacle_max_range=2.5,raytrace_max_range=3.0,
+                               min_obstacle_height=-1.e6 if relative_ground else config['obstacle_min_height'],
+                               max_obstacle_height=1.e6 if relative_ground else config['obstacle_max_height'])
     bt=base['bt_navigator']['ros__parameters']
     # Action acknowledgement is not a sensor watchdog. On the loaded Orin,
     # the generic 20 ms budget can abort a healthy concurrent replan.
@@ -67,8 +109,12 @@ def nav_params(config,mapfile,replay):
     bt['default_nav_through_poses_bt_xml']=str(REPO/'astribot_nav_bringup/config/navigation_through.xml')
     bt['default_nav_to_pose_bt_xml']=str(HERE/'navigation.xml')
     bt['plugin_lib_names']=['nav2_compute_path_through_poses_action_bt_node','nav2_compute_path_to_pose_action_bt_node','nav2_follow_path_action_bt_node','nav2_pipeline_sequence_bt_node',
-        'nav2_rate_controller_bt_node','nav2_recovery_node_bt_node','nav2_wait_action_bt_node']
-    # Namespace parameters match all node fully-qualified names, including nested costmaps.
+        'nav2_rate_controller_bt_node','nav2_is_path_valid_condition_bt_node',
+        'nav2_globally_updated_goal_condition_bt_node','nav2_path_expiring_timer_condition',
+        # Stock bounded recovery: clear local costmap / wait, then abort.
+        # ReactiveFallback is a BehaviorTree.CPP builtin: no Nav2 library to load.
+        'nav2_recovery_node_bt_node','nav2_round_robin_node_bt_node',
+        'nav2_goal_updated_condition_bt_node','nav2_clear_costmap_service_bt_node','nav2_wait_action_bt_node']
     return {'towergo':{'nav':base}}
 
 
@@ -140,14 +186,14 @@ def main():
     m=yaml.safe_load(mapfile.read_text());image=mapfile.parent/m['image']
     if abs(m['resolution']-.05)>1e-8:raise ValueError('当前 lattice 配置要求 0.05 m 地图')
     from ament_index_python.packages import get_package_prefix,get_package_share_directory
-    dependencies=['fast_lio','towergo_dual_livox','astribot_nav_bringup','nav2_amcl','nav2_regulated_pure_pursuit_controller']
+    dependencies=['fast_lio','towergo_dual_livox','astribot_nav_bringup','nav2_amcl','nav2_controller']
     for package in dependencies:get_package_prefix(package)
     if args.check:
         print(json.dumps(dict(mode=args.mode,map=str(mapfile),max_speed=config['max_speed'],dependencies=dependencies),ensure_ascii=False,indent=2));return
     if os.environ.get('ROS_DOMAIN_ID')!=('125' if args.replay else '25'):raise ValueError('错误的 ROS Domain，请使用 tg-navigation.sh')
-    session_lock=open('/tmp/towergo-navigation-%s-%s.lock'%(os.getuid(),os.environ['ROS_DOMAIN_ID']),'a')
-    try:fcntl.flock(session_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-    except BlockingIOError:raise RuntimeError('已有导航会话；未启动节点或发送停止指令')
+    # A new session replaces any previous one (normal stop first, then forced).
+    from .takeover import replace_previous,claim
+    session_lock=replace_previous(os.environ['ROS_DOMAIN_ID'],log=lambda text:print(text,flush=True))
     from mapping_support import OwnedProcess,atomic_json,REQUIRED_RAW_TOPICS
     from tg_mapping import parameters,topic_names
     import rclpy
@@ -156,6 +202,7 @@ def main():
     from .web import Web,server
     run=Path(args.output_root)/('navigation_'+datetime.datetime.now().strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6])
     run.mkdir(parents=True)
+    claim(session_lock,run)
     (run/'config.yaml').write_text(yaml.safe_dump(config));(run/'nav2.yaml').write_text(yaml.safe_dump(nav_params(config,mapfile,bool(args.replay))))
     report=dict(mode=args.mode,replay=args.replay,map=str(mapfile),map_sha256=digest(mapfile),image_sha256=digest(image),
                 config_sha256=digest(run/'config.yaml'),max_speed=config['max_speed'],started=time.time(),status='starting',processes={})
@@ -179,8 +226,13 @@ def main():
         # Discover existing publishers before reusing the keyboard SLAM sensor startup.
         deadline=time.monotonic()+2
         while time.monotonic()<deadline:executor.spin_once(timeout_sec=.05)
-        if node.count_publishers('/towergo/nav/odom')>1 or node.count_publishers('/towergo/nav/lio/odometry'):
-            raise RuntimeError('已有真机导航会话，请先结束原会话')
+        # A replaced session's DDS participants can linger briefly after exit.
+        def previous_publishers():
+            return node.count_publishers('/towergo/nav/odom')>1 or node.count_publishers('/towergo/nav/lio/odometry')
+        deadline=time.monotonic()+20
+        while previous_publishers() and time.monotonic()<deadline:executor.spin_once(timeout_sec=.1)
+        if previous_publishers():
+            raise RuntimeError('旧导航会话的话题仍在发布；请检查是否有其他用户或终端启动的导航进程')
         if args.replay and (node.count_publishers('/clock') or any(node.count_publishers(t) for t in REQUIRED_RAW_TOPICS)):
             raise RuntimeError('回放 Domain 已有传感器或时钟发布者')
         report['sensor_startup']=start_live_sensors(
@@ -213,7 +265,10 @@ def main():
             diagnostic_topics=[*REQUIRED_RAW_TOPICS,'/towergo/nav/lio/odometry','/towergo/nav/odom',
                 '/towergo/nav/scan','/towergo/nav/amcl_pose','/towergo/nav/tf','/towergo/nav/tf_static',
                 '/towergo/nav/executor_status','/towergo/nav/executor_control','/towergo/nav/cmd_vel_nav','/towergo/nav/route_execution',
-                '/astribot_chassis/joint_space_states','/towergo/nav/map','/clock']
+                '/astribot_chassis/joint_space_states','/towergo/nav/map','/clock',
+                # Local obstacle evidence: what DWB actually avoided.
+                '/towergo/nav/local_costmap/costmap','/towergo/nav/local_costmap/published_footprint',
+                '/towergo/nav/plan','/towergo/nav/obstacles/front','/towergo/nav/obstacles/back']
             qos={t:dict(reliability='best_effort',durability='volatile',history='keep_last',depth=10)
                  for t in diagnostic_topics}
             for t in ('/towergo/nav/tf_static','/towergo/nav/map'):
@@ -265,9 +320,11 @@ def main():
             node.stop('会话结束')
             end=time.monotonic()+.3
             while rclpy.ok() and time.monotonic()<end:executor.spin_once(timeout_sec=.02)
+        # Bounded shutdown: the executor gets longer to stop the chassis; the
+        # rest escalate to SIGTERM/SIGKILL after 5 s instead of 20 s each.
         for name in ('diagnostic_recorder','executor','player','nav2','fastlio','adapter'):
             if name in procs:
-                try:procs[name].stop()
+                try:procs[name].stop(timeout=8 if name=='executor' else 5)
                 except Exception as exc:report.setdefault('shutdown_errors',[]).append(str(exc))
         if http:http.shutdown();http.server_close()
         if executor:executor.shutdown()

@@ -73,7 +73,7 @@ def setup(now=10.25):
     g=Geometry(CONFIG);clock=[now]
     n=S(geometry=g,lidar_from_imu=np.linalg.inv(g.imu_lidar),pose_by_ns=deque(maxlen=32),pending_body=None,
         metrics=Metrics(),latest_scan=None,latest_scan_source_stamp=None,latest_scan_stamp_ns=None,
-        scan_pub=Publisher(),received={},stamps={},error=None,
+        fused_scans=deque(maxlen=10),scan_pub=Publisher(),received={},stamps={},error=None,
         node=S(get_clock=lambda:S(now=lambda:S(nanoseconds=int(clock[0]*1e9)))))
     n.fail=lambda text:setattr(n,'error',text)
     n.seen=lambda key,msg:msg.header.stamp.sec+msg.header.stamp.nanosec*1e-9

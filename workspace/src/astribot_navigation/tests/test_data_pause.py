@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def coordinator():
     tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
     cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
-    names={'pause_allowed','pause_for_data','tick_data_pause'}
+    names={'pause_allowed','pause_navigation','tick_data_pause','prepare_navigation'}
     cls=ast.ClassDef(name='Coordinator',bases=[],keywords=[],body=[n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name in names],decorator_list=[])
     import sys
     sys.path.insert(0,str(ROOT/'scripts'))
@@ -17,18 +17,19 @@ def coordinator():
     ns={'sensor_fresh':sensor_fresh,'NS':'/towergo/nav/'}
     exec(compile(ast.fix_missing_locations(ast.Module(body=[cls],type_ignores=[])),'web','exec'),ns)
     w=ns['Coordinator']();w.sent=[];w.events=[];w.stops=[];w.starts=[]
-    w.send=lambda op:w.sent.append(op);w.event=w.events.append
+    w.send=lambda op,**kw:w.sent.append((op,kw));w.event=w.events.append
     w.stop=lambda *a,**kw:(w.stops.append(a),setattr(w,'data_pause',None))
     w.begin=w.starts.append
     w.count_publishers=lambda t:1
     w.sensors=S(error=None,recovering_until=0,received={k:100 for k in ('front','back','imu','lio')},stamps={k:100 for k in ('front','back','imu','lio')})
-    w.quality=S(monitor=S(invalid=False,state={'status':'trusted'}),recovery=S(status='idle'))
+    w.quality=S(monitor=S(invalid=False,last_trusted=[0,0,0],state={'status':'trusted'}),recovery=S(status='idle'))
     w.executor_at=100;w.executor_state={'rights':True,'stationary':True,'task':None}
     w.confidence=S(blocked=False);w.amcl_cov=.05;w.amcl_active=True;w.amcl_lifecycle_at=100;w.active_lifecycle=True;w.lifecycle_at=100
     w.goal_attempt=1;w.action_finished=False;w.goal_handle=S(cancel_goal_async=lambda:w.events.append('cancel'))
-    w.lease=S(owner='owner',stop=lambda:w.events.append('lease revoked'))
+    w.lease=S(task='original',owner='owner',stop=lambda:w.events.append('lease revoked'))
     w.state={'goal':[1,2,.3],'requested_speed':.05};w.localization={}
-    w.pause_for_data(100)
+    w.params_ok=True
+    w.pause_navigation(100,'等待扫描与定位变换恢复')
     return w
 
 def fresh(w,t):
@@ -37,9 +38,9 @@ def fresh(w,t):
 
 def test_pause_requests_hold_cancels_action_and_preserves_goal():
     w=coordinator()
-    assert w.sent==['cancel_stationary'] and 'cancel' in w.events
-    assert w.phase=='paused' and w.goal_attempt==2 and w.state['command_velocity']==[0,0]
-    assert w.data_pause['goal']==[1,2,.3] and not w.starts
+    assert w.sent==[('cancel_stationary',{})] and 'cancel' in w.events
+    assert w.phase=='paused' and w.goal_attempt==2 and w.state['command_velocity']==[0,0,0]
+    assert w.state['goal']==[1,2,.3] and not w.starts
 
 def test_resume_requires_two_continuous_seconds_and_old_action_finished():
     w=coordinator()
@@ -50,16 +51,14 @@ def test_resume_requires_two_continuous_seconds_and_old_action_finished():
         fresh(w,t);w.tick_data_pause(t,t,healthy)
     assert not w.starts
     fresh(w,105);w.tick_data_pause(105,105,True)
-    assert w.starts==[dict(x=1,y=2,yaw=.3,owner='owner',speed=.05)]
-    assert 'lease revoked' in w.events and w.data_pause is None
+    assert w.phase=='preparing' and w.sent[-1]==('prepare',dict(task='original',speed=.05))
+    assert 'lease revoked' not in w.events and w.data_pause is None
 
-@pytest.mark.parametrize('kind',['rights','fault','feedback','raw','mismatch','history','publisher','lifecycle'])
+@pytest.mark.parametrize('kind',['rights','fault','mismatch','history','publisher','lifecycle'])
 def test_other_failures_cancel_without_resume(kind):
     w=coordinator();w.action_finished=True
     if kind=='rights':w.executor_state['rights']=False
     if kind=='fault':w.executor_state['fault']='SDK fault'
-    if kind=='feedback':w.executor_at=99
-    if kind=='raw':w.sensors.received['imu']=99
     if kind=='mismatch':w.quality.monitor.invalid=True
     if kind=='history':w.sensors.error='history reset'
     if kind=='publisher':w.count_publishers=lambda t:2
@@ -75,10 +74,14 @@ def test_stationary_and_hold_completion_required(field):
         fresh(w,t);w.tick_data_pause(t,t,True)
     assert not w.starts and w.data_pause['good_since'] is None
 
-def test_ten_seconds_is_absolute_deadline():
+def test_long_scan_gap_keeps_original_task_until_data_returns():
     w=coordinator();w.action_finished=True
-    fresh(w,110);w.tick_data_pause(110,110,True)
-    assert w.stops and not w.starts
+    for t in [110,150,250]:
+        fresh(w,t);w.tick_data_pause(t,t,False)
+        assert w.phase=='paused' and not w.stops
+    fresh(w,251);w.tick_data_pause(251,251,True)
+    fresh(w,253);w.tick_data_pause(253,253,True)
+    assert w.phase=='preparing' and w.sent[-1]==('prepare',dict(task='original',speed=.05))
 
 def test_stop_clears_pause_and_invalidates_old_action():
     tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
@@ -89,8 +92,8 @@ def test_stop_clears_pause_and_invalidates_old_action():
     assert w.retreat is None and w.state['recovery'] is None
     assert w.data_pause is None and w.goal_attempt==3
 
-@pytest.mark.parametrize('browser_valid,tf_ok,scan_age,expected',[(True,False,.1,'pause'),(True,True,1.01,'pause'),(False,False,.1,'stop')])
-def test_actual_dispatch_prioritizes_manual_lease_loss(browser_valid,tf_ok,scan_age,expected):
+@pytest.mark.parametrize('browser_valid,tf_ok,quality_ok,scan_age,expected',[(True,False,True,.1,'pause'),(True,True,True,1.01,'pause'),(True,True,False,.29,'pause'),(False,False,False,.1,'stop')])
+def test_actual_dispatch_prioritizes_manual_lease_loss(browser_valid,tf_ok,quality_ok,scan_age,expected):
     import json
     import sys
     sys.path.insert(0,str(ROOT/'scripts'))
@@ -104,17 +107,53 @@ def test_actual_dispatch_prioritizes_manual_lease_loss(browser_valid,tf_ok,scan_
     tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
     block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=='self.lease.active')
     exec(compile(ast.fix_missing_locations(ast.Module(body=[block],type_ignores=[])),'dispatch','exec'),
-         dict(self=w,now=100,ros_now=100,tf_ok=tf_ok,sensor_fresh=sensor_fresh,json=json))
+         dict(self=w,now=100,ros_now=100,localized=tf_ok and quality_ok,execution=True,json=json))
     assert bool(w.stops)==(expected=='stop')
     assert (w.phase=='paused')==(expected=='pause')
 
 
 def test_data_pause_does_not_reset_retreat_attempt_budget():
     w=coordinator();w.recovery_attempts=1;w.action_finished=True
-    begin=w.begin
-    def restarting(obj):
-        w.recovery_attempts=0;begin(obj)
-    w.begin=restarting
     fresh(w,100);w.tick_data_pause(100,100,True)
     fresh(w,102.01);w.tick_data_pause(102.01,102.01,True)
-    assert len(w.starts)==1 and w.recovery_attempts==1
+    assert w.phase=='preparing' and w.recovery_attempts==1
+
+
+def test_blocked_reverse_rechecks_the_same_arc_and_restarts_clear_time():
+    w=coordinator();w.goal_handle=None;w.action_finished=True
+    w.phase='running';w.data_pause=None;w.lease.active=True;w.valid=lambda task:True
+    w.cmd=(-.03,-.004,.2);w.cmd_at=w.nav_feedback_at=100.
+    w.state['ready']=True;w.executor_state['task']=w.lease.task
+    w.config={'collision_time_horizon':1.5}
+    samples=iter([False,False,None,True,False,True,True,True]);queries=[]
+    def clearance(distance,**twist):
+        queries.append((distance,twist))
+        return next(samples),'后退路径有障碍'
+    w.retreat_clearance=clearance
+    tree=ast.parse((ROOT/'scripts/real_navigation/web.py').read_text())
+    cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Web')
+    tick=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_tick')
+    block=next(n for n in tick.body if isinstance(n,ast.If) and ast.unparse(n.test)=='self.lease.active')
+    from real_navigation.core import navigation_command
+    exec(compile(ast.Module(body=[block],type_ignores=[]),'reverse-dispatch','exec'),
+         dict(self=w,now=100,ros_now=100,navigation_command=navigation_command))
+    assert w.phase=='paused' and w.sent[-1]==('cancel_stationary',{})
+    w.executor_state['task']=None
+    for t in (101,130,131,132,140,141.99):
+        fresh(w,t);w.tick_data_pause(t,t,True)
+        assert w.phase=='paused' and not w.stops
+    fresh(w,142);w.tick_data_pause(142,142,True)
+    assert queries==[(.045,dict(vx=-.03,vy=-.004,w=.2))]*8
+    assert w.sent[-1]==('prepare',dict(task='original',speed=.05))
+    assert w.state['goal']==[1,2,.3] and w.phase=='preparing'
+
+
+def test_stale_executor_status_waits_for_a_fresh_stationary_report():
+    w=coordinator();w.action_finished=True
+    for t in (101,120):
+        fresh(w,t);w.executor_at=t-1
+        w.tick_data_pause(t,t,True)
+        assert w.phase=='paused' and w.data_pause['good_since'] is None and not w.stops
+    fresh(w,121);w.tick_data_pause(121,121,True)
+    fresh(w,123);w.tick_data_pause(123,123,True)
+    assert w.phase=='preparing'

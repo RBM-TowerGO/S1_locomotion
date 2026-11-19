@@ -61,25 +61,52 @@ def speed(value):
 
 # Hard yaw-rate cap for real-robot navigation (raised 0.1 -> 0.3 rad/s, 2026-11-05).
 MAX_ANGULAR_SPEED = .3
+# Navigation lateral / reverse caps (raised 0.05 -> 0.15 and 0.03 -> 0.10 m/s,
+# 2026-11-20). Recovery backup keeps its separate 0.03 m/s limit.
+MAX_LATERAL_SPEED = .15
+MAX_REVERSE_SPEED = .10
 
 
-def limited(v, w, maximum):
+# Same order as AMCL's planar jitter would make 5 cm / 3 deg flicker at the
+# goal; Nav2's defaults are 0.25 m / 0.25 rad.
+GOAL_XY = .10
+GOAL_YAW = .10
+
+
+def limited(vx, vy, w, maximum):
     maximum = speed(maximum)
-    if not all(math.isfinite(x) for x in (v, w)) or v < 0:
-        raise ValueError('仅接受有限的前进和转向速度')
+    if not all(math.isfinite(x) for x in (vx, vy, w)):
+        raise ValueError('底盘速度必须为有限值')
     if maximum == 0:
-        return 0., 0.
-    scale = min(1., maximum / v if v else 1., MAX_ANGULAR_SPEED / abs(w) if w else 1.)
-    return v * scale, w * scale
+        return 0., 0., 0.
+    scale = min(1., maximum / max(1e-12, math.hypot(vx, vy)),
+                MAX_LATERAL_SPEED / abs(vy) if vy else 1., MAX_REVERSE_SPEED / -vx if vx < 0 else 1.,
+                MAX_ANGULAR_SPEED / abs(w) if w else 1.)
+    return vx * scale, vy * scale, w * scale
 
 
-def controller_parameters(value):
+def relative_goal(pose, dx, dy, yaw):
+    c, s = math.cos(pose[2]), math.sin(pose[2])
+    return [pose[0]+c*dx-s*dy, pose[1]+s*dx+c*dy, pose[2]+yaw]
+
+
+def at_goal(pose, goal, tolerances):
+    if pose is None:
+        return False
+    angle = math.remainder(goal[2]-pose[2], 2*math.pi)
+    return math.dist(pose[:2], goal[:2]) <= tolerances[0] and abs(angle) <= tolerances[1]
+
+
+def controller_parameters(value, tolerances=(GOAL_XY,GOAL_YAW)):
     value = speed(value)
     if value == 0:
         raise ValueError('速度为 0：保持静止，不启动导航')
-    return {'FollowPath.desired_linear_vel': value,
-            'FollowPath.regulated_linear_scaling_min_speed': min(.02, value),
-            'FollowPath.min_approach_linear_velocity': min(.015, value),
+    # FollowPath is RegulatedPurePursuit (forward + yaw only); Nudge keeps
+    # its own omni segment follower for small lateral adjustments.
+    return {'Nudge.desired_linear_vel': value,
+            'FollowPath.desired_linear_vel': value,
+            'goal_checker.xy_goal_tolerance': tolerances[0],
+            'goal_checker.yaw_goal_tolerance': tolerances[1],
             'progress_checker.required_movement_radius': min(.05, value * 10.)}
 
 
@@ -109,6 +136,12 @@ def validate_config(config, hardware=False):
         raise ValueError('Invalid obstacle height')
     if not 0 < config['slice_thickness'] <= .5:
         raise ValueError('Invalid slice thickness')
+    if 'ground_z_in_base' in config or 'ground_slice_height' in config:
+        ground=config.get('ground_z_in_base')
+        if not isinstance(ground,dict) or any(k not in ground or not -.5 < ground[k] < 0 for k in ('front','back')):
+            raise ValueError('Invalid nominal ground height')
+        if not config['slice_thickness']/2 < config.get('ground_slice_height',0) <= 2.:
+            raise ValueError('Invalid ground-relative slice')
     if config.get('scan_input','lio_body') not in ('lio_body','raw_pair'):
         raise ValueError('scan_input must be lio_body or raw_pair')
     for box in config.get('self_filter_boxes',[]):
@@ -179,7 +212,7 @@ class Drive:
         self.limit = 0.
         self.last_tick = now
         self.command_time = self.permit_time = -math.inf
-        self.command_value = (0.,0.)
+        self.command_value = (0.,0.,0.)
         self.fault = None
         self.moving = False
         self.target_sent = False
@@ -190,6 +223,8 @@ class Drive:
         self.hold_deadline = None
         self.hold_sample = None
         self.seed_target = False
+        self.previous_command = (0.,0.,0.)
+        self.remaining = (math.inf,math.inf)
 
     def prepare(self, task, value):
         if self.fault or self.task or self.holding:
@@ -200,25 +235,26 @@ class Drive:
         self.target = list(self.backend.desired())
         self.target_sent = False
         self.seed_target = True
+        self.previous_command = (0.,0.,0.)
         self.warning = None
         self.task, self.limit = task, value
         self.command_time = self.permit_time = -math.inf
-        self.command_value = (0.,0.)
+        self.command_value = (0.,0.,0.)
 
-    def command(self, task, v, w, now):
+    def command(self, task, v, w, now, *, vy=0., remaining=None):
         if task != self.task or self.fault:
             return False
-        self.command_value = limited(v,w,self.limit)
+        self.command_value = limited(v,vy,w,self.limit)
+        self.remaining = remaining if remaining is not None else (math.inf,math.inf)
         self.command_time = now
         return True
 
     def backup_command(self,task,v,now):
-        # Only the explicitly gated coordinator recovery uses signed velocity.
-        # Ordinary navigation remains forward-only via command()/limited().
         if not self.task or task!=self.task or self.fault:return False
         if not math.isfinite(v) or not -.03<=v<=0:
             raise ValueError('回退恢复仅允许 0–0.03 m/s 的直线后退')
-        self.command_value=(max(v,-self.limit),0.)
+        self.command_value=(max(v,-self.limit),0.,0.)
+        self.remaining=(math.inf,math.inf)
         self.command_time=now
         return True
 
@@ -229,7 +265,7 @@ class Drive:
     def stop(self, reason=None):
         self.task = None
         self.holding = False
-        self.command_value = (0.,0.)
+        self.command_value = (0.,0.,0.)
         self.moving = False
         if reason:
             self.fault = reason
@@ -248,7 +284,7 @@ class Drive:
             raise RuntimeError('底盘反馈无效或超时')
         return list(p),received
 
-    def suspend(self, now, reason):
+    def suspend(self, now, reason, quiet=False):
         """Cancel the task and request a measured-position hold; verify settling.
         This is a target request, not a claimed physical brake guarantee.
         """
@@ -256,9 +292,9 @@ class Drive:
             if self.fault: return False
             if not self.backend.has_control(): raise RuntimeError('底盘控制权丢失')
             p,received=self.feedback(now)
-            self.task=None;self.command_value=(0.,0.);self.moving=False
+            self.task=None;self.command_value=(0.,0.,0.);self.moving=False
             self.command_time=self.permit_time=-math.inf
-            self.warning=reason+'；已取消任务，确认静止后请重新提交'
+            self.warning=None if quiet else reason+'；已取消任务，确认静止后请重新提交'
             if not self.holding:
                 self.target=p
                 if self.target_sent:
@@ -276,7 +312,7 @@ class Drive:
     def tick(self, now):
         dt=now-self.last_tick;self.last_tick=now
         try:
-            if self.fault:return (0.,0.)
+            if self.fault:return (0.,0.,0.)
             if not math.isfinite(dt) or dt<=0:raise RuntimeError('控制时钟无效')
             if not self.backend.has_control():raise RuntimeError('底盘控制权丢失')
             p,received=self.feedback(now)
@@ -291,34 +327,56 @@ class Drive:
                     self.holding=False
                 elif now>=self.hold_deadline:
                     raise RuntimeError('位置保持请求后未确认静止')
-                return (0.,0.)
-            if not self.task:return (0.,0.)
-            if now-self.permit_time>=.5:
-                self.suspend(now,'运动许可失效');return (0.,0.)
-            if now-self.command_time>=.3:
-                self.suspend(now,'导航指令超时');return (0.,0.)
+                return (0.,0.,0.)
+            if not self.task:return (0.,0.,0.)
+            # Watchdog: Nav2 stops publishing when a goal ends or is cancelled,
+            # and a stalled controller looks the same. Either way, hold.
+            if now-self.permit_time>=.5 or now-self.command_time>=.3:
+                self.suspend(now,'速度指令停止',quiet=True);return (0.,0.,0.)
             if dt>.1:
                 self.warning='控制周期延迟 %.3f s；本周期不推进目标，不补发位移'%dt
-                return (0.,0.)
+                return (0.,0.,0.)
             if self.seed_target:
                 # Explicit new task discards a previous desired-position backlog.
                 # Seed only after obtaining fresh native SDK feedback.
                 self.target=list(p);self.seed_target=False
-            v,w=self.command_value
+            v,vy,w=self.command_value
+            previous=self.previous_command
+            self.previous_command=self.command_value
+            # Native SDK targets accumulate. Remove unfinished lead on any axis
+            # that stops or reverses, without rotating native coordinates.
+            # This alone withdraws translation lead when the controller
+            # switches to an in-place turn; no separate settle-before-turn hold.
+            for i, (old, new) in enumerate(zip(previous, self.command_value)):
+                if old and old*new<=0:
+                    self.target[i]=p[i]
             before=list(self.target)
-            if (v,w)==(0.,0.):
+            if not any(self.command_value):
                 # Withdraw unexecuted lead instead of retaining a residual move.
                 if self.target_sent:
                     self.target=list(p);self.backend.send(list(p))
                 self.moving=False
                 self.tracking=dict(target=list(self.target),feedback=p,position_error_m=math.hypot(self.target[0]-p[0],self.target[1]-p[1]),
                     yaw_error_rad=abs(self.target[2]-p[2]),feedback_receive_age_s=now-received,
-                    tick_interval_s=dt,sampled_at=now,requested_command=[v,w],
-                    applied_command=[0.,0.],governor_scale=1.)
-                return (0.,0.)
-            step=min(dt,.01)
-            delta=[v*step,0.,w*step]
-            limits=(self.config['max_position_error'],self.config['max_yaw_error'])
+                    tick_interval_s=dt,sampled_at=now,requested_command=list(self.command_value),
+                    applied_command=[0.,0.,0.],governor_scale=1.)
+                return (0.,0.,0.)
+            # Integrate the elapsed period. The loop never runs faster than
+            # 10 ms, so a 10 ms cap silently dropped 20-50 % of the commanded
+            # speed whenever Python scheduling stretched a tick. Ticks over
+            # 100 ms already return zero above.
+            step=min(dt,.05)
+            delta=[v*step,vy*step,w*step]
+            limits=(min(self.config['max_position_error'], self.remaining[0]),
+                    min(self.config['max_yaw_error'], self.remaining[1]))
+            # When entering final approach, withdraw lead beyond the remaining
+            # displacement now instead of letting the chassis chase the old target.
+            outstanding=math.dist(before[:2],p[:2])
+            if self.remaining[0]<self.config['max_position_error'] and outstanding>limits[0]:
+                for i in (0,1):
+                    before[i]=p[i]+(before[i]-p[i])*limits[0]/outstanding
+            if self.remaining[1]<self.config['max_yaw_error']:
+                before[2]=p[2]+max(-limits[1],min(limits[1],before[2]-p[2]))
             gap=math.hypot(before[0]-p[0],before[1]-p[1])
             angle=abs(before[2]-p[2])
             # No proportional throttling for normal tracking lag. Advance at
@@ -326,41 +384,44 @@ class Drive:
             scale=1.
             # Clip the increment to the remaining budget instead of rejecting
             # the entire tick at the boundary (which creates zero-speed pulses).
-            if delta[0]:
+            length=math.hypot(delta[0],delta[1])
+            if length:
+                ux,uy=delta[0]/length,delta[1]/length
+                dx,dy=before[0]-p[0],before[1]-p[1]
+                # Intersect the increment ray with the circular XY lead budget.
+                along=dx*ux+dy*uy
+                across=dx*uy-dy*ux
                 radius=max(gap,limits[0])
-                dx=before[0]-p[0];dy=before[1]-p[1]
-                edge=math.sqrt(max(0.,radius*radius-dy*dy))
-                available=(edge-dx) if delta[0]>0 else (edge+dx)
-                scale=min(scale,max(0.,available/abs(delta[0])))
+                edge=math.sqrt(max(0., radius*radius-across*across))
+                scale=min(scale,max(0.,(edge-along)/length))
             if delta[2]:
                 radius=max(angle,limits[1]);offset=before[2]-p[2]
                 available=radius-offset if delta[2]>0 else radius+offset
                 scale=min(scale,max(0.,available/abs(delta[2])))
             candidate=[before[i]+delta[i]*scale for i in range(3)]
-            applied=(v*scale,w*scale)
+            applied=(v*scale,vy*scale,w*scale)
             self.warning=('底盘跟随偏差接近领先预算：位置 %.3f m、角度 %.3f rad；领先预算增量裁剪 %.0f%%'
                           %(gap,angle,100*scale)) if scale<.999 else None
             self.tracking=dict(target=list(candidate),feedback=list(p),
                 position_error_m=math.hypot(candidate[0]-p[0],candidate[1]-p[1]),
                 yaw_error_rad=abs(candidate[2]-p[2]),feedback_receive_age_s=now-received,
-                tick_interval_s=dt,sampled_at=now,requested_command=[v,w],
+                tick_interval_s=dt,sampled_at=now,requested_command=list(self.command_value),
                 applied_command=list(applied),governor_scale=scale)
             self.target=candidate
             # Do not send an inherited target if no motion has been requested yet.
             if scale>0 or self.target_sent:
                 self.backend.send(list(candidate));self.target_sent=True
-            self.moving=bool(applied[0] or applied[1])
+            self.moving=any(applied)
             return applied
         except Exception as exc:
-            self.stop(str(exc));return (0.,0.)
+            self.stop(str(exc));return (0.,0.,0.)
 
 
 def navigation_command(command, command_age, feedback_age):
     """Hold zero during a live Nav2 recovery; never reuse an old velocity."""
     if command_age<.3:return tuple(command)
     if feedback_age>=1.:raise RuntimeError('Nav2 动作反馈超时')
-    if command_age>=15.:raise RuntimeError('Nav2 连续 15 秒没有速度输出')
-    return (0.,0.)
+    return (0.,)*len(command)
 
 
 def nav2_failure_reason(log_path,status,start_offset=0):

@@ -13,19 +13,18 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.parameter import Parameter
-from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, Twist
 from nav_msgs.msg import Path as NavPath
-from nav2_msgs.action import NavigateToPose
+from nav2_msgs.action import NavigateToPose, FollowPath
 from rcl_interfaces.srv import SetParametersAtomically
 from lifecycle_msgs.srv import GetState
 from std_msgs.msg import String
 from tf2_ros import Buffer,TransformListener
 from astribot_nav_sim.grid_world import GridWorld
 from .geometry import safe_pose
-from .recovery import Retreat, backup_clearance, recoverable_navigation_failure
 from .localization_runtime import LocalizationRuntime
 from .confidence import Confidence
-from .core import Lease, speed, controller_parameters, limited, Convergence, navigation_command, SCAN_MAX_SOURCE_AGE, BROWSER_LEASE_SECONDS, LOCALIZATION_MAX_SOURCE_AGE, localization_fresh, sensor_fresh, nav2_failure_reason, costmap_inflation_radius
+from .core import GOAL_XY, GOAL_YAW, at_goal, relative_goal, Lease, speed, controller_parameters, Convergence, SCAN_MAX_SOURCE_AGE, BROWSER_LEASE_SECONDS, LOCALIZATION_MAX_SOURCE_AGE, localization_fresh, nav2_failure_reason, costmap_inflation_radius
 from .sensors import Sensors,NS,FRAME
 
 
@@ -38,34 +37,36 @@ class Web(Node):
         self.stop_request=threading.Event();self.request_epoch=0
         self.sensors=Sensors(self,config);self.tf=Buffer();self.listener=TransformListener(self.tf,self)
         self.action=ActionClient(self,NavigateToPose,NS+'navigate_to_pose')
+        self.follow=ActionClient(self,FollowPath,NS+'follow_path')
         self.parameters=self.create_client(SetParametersAtomically,NS+'controller_server/set_parameters_atomically')
         self.lifecycle=self.create_client(GetState,NS+'bt_navigator/get_state')
         self.amcl_lifecycle=self.create_client(GetState,NS+'amcl/get_state')
         self.amcl_active=False;self.amcl_lifecycle_at=-1e20;self.amcl_lifecycle_pending=False
         self.initial=self.create_publisher(PoseWithCovarianceStamped,NS+'initialpose',1)
-        self.control=self.create_publisher(String,NS+'executor_control',1)
+        self.control=self.create_publisher(String,NS+'executor_control',10)
         self.create_subscription(String,NS+'executor_status',self.executor_status,1)
         self.create_subscription(PoseWithCovarianceStamped,NS+'amcl_pose',self.amcl,10)
         self.create_subscription(Twist,NS+'cmd_vel_nav',self.command,1)
         self.create_subscription(String,NS+'route_execution',self.route_execution,1)
-        for topic,key in [('plan','plan'),('lookahead_collision_arc','local_plan')]:
+        for topic,key in [('plan','plan'),('local_plan','local_plan')]:
             self.create_subscription(NavPath,NS+topic,lambda m,k=key:self.path(m,k),1)
         self.sequence=0;self.goal_handle=None;self.executor_state={};self.executor_at=-1e20
-        self.cmd=(0.,0.);self.cmd_at=-1e20;self.nav_feedback_at=-1e20;self.amcl_at=-1e20;self.amcl_cov=math.inf
+        self.cmd=(0.,0.,0.);self.cmd_at=-1e20;self.nav_feedback_at=-1e20;self.amcl_at=-1e20;self.amcl_cov=math.inf
         self.amcl_stamp=-1e20;self.initial_stamp=math.inf;self.initial_tf_ns=None;self.initial_tf_error=None
         self.active_lifecycle=False;self.lifecycle_at=-1e20;self.lifecycle_pending=False
-        self.data_pause=None;self.goal_attempt=0;self.action_finished=True
-        self.retreat=None;self.recovery_attempts=0
+        self.goal_attempt=0
+        self.relative_odom_goal=None;self.tolerances=(GOAL_XY,GOAL_YAW)
         self.phase='idle';self.phase_at=0.;self.params_ok=False;self.goal_sent=False
+        self.parameter_request=None
         self.initial_message=None;self.initial_at=0.;self.initial_last=0.
         self.localization_id=0;self.localization=dict(id=0,status='idle',reason=None)
         self.convergence=Convergence();self.confidence=Confidence()
         self.still_since=None;self.result_pending=None;self.pending_goal=None
         self.state=dict(status='真机观察模式：等待传感器' if mode=='observe' else '真机：等待传感器与执行器',
                         mode=mode,replay=bool(self.get_parameter('use_sim_time').value),ready=False,initialized=False,busy=False,error=None,pose=None,start=None,goal=None,
-                        velocity=[0.,0.],command_velocity=[0.,0.],requested_speed=.05,plan=[],local_plan=[],trajectory=[],
+                        velocity=[0.,0.,0.],command_velocity=[0.,0.,0.],requested_speed=.15,plan=[],local_plan=[],trajectory=[],
                         obstacles=[],distance_remaining=None,diagnostics=[],task=None,owner=None,result=None,
-                        planning_turning_radius=config.get('planning_turning_radius',1.0),inflation_radius=costmap_inflation_radius(config),navigation_style='continuous_curved',obstacle_source='static_map',live_obstacle_avoidance=False,footprint=config['footprint'],max_speed=config['max_speed'],scan_source_timeout=SCAN_MAX_SOURCE_AGE,localization_source_timeout=LOCALIZATION_MAX_SOURCE_AGE,transform_source_timeout=.8,browser_timeout=BROWSER_LEASE_SECONDS,collision_time_horizon=config.get('collision_time_horizon',1.5),footprint_padding=config['footprint_padding'])
+                        planning_turning_radius=None,localization_trusted=False,localization_warning=None,inflation_radius=costmap_inflation_radius(config),navigation_style='omni',obstacle_source='static_map_and_lidar',live_obstacle_avoidance=True,footprint=config['footprint'],max_speed=config['max_speed'],scan_source_timeout=SCAN_MAX_SOURCE_AGE,localization_source_timeout=LOCALIZATION_MAX_SOURCE_AGE,transform_source_timeout=.8,browser_timeout=BROWSER_LEASE_SECONDS,collision_time_horizon=config.get('collision_time_horizon',1.5),footprint_padding=config['footprint_padding'])
         self.log=(self.run/'navigation.jsonl').open('a',buffering=1)
         self.sensor_epoch=0
         self.last_sample=0.;self.last_lifecycle=0.;self.last_metrics=0.
@@ -104,12 +105,8 @@ class Web(Node):
         except (ValueError,TypeError):pass
 
     def command(self,msg):
-        try:
-            if any(v!=0 for v in (msg.linear.y,msg.linear.z,msg.angular.x,msg.angular.y)):
-                raise ValueError('不允许横移或其他轴的指令')
-            self.cmd=limited(msg.linear.x,msg.angular.z,self.state['requested_speed'])
-            self.cmd_at=time.monotonic()
-        except ValueError as exc:self.stop(str(exc))
+        # Display only: the executor subscribes to Nav2's cmd_vel directly.
+        self.cmd=(msg.linear.x,msg.linear.y,msg.angular.z);self.cmd_at=time.monotonic()
 
     def path(self,msg,key):
         if msg.header.frame_id not in (FRAME['map'],FRAME['odom']):return
@@ -121,86 +118,38 @@ class Web(Node):
         except Exception:pass
 
     def valid(self,task):
-        return self.lease.valid(task,time.monotonic())
+        # The browser only submits/cancels. Losing it never stops a goal.
+        return self.lease.active and task==self.lease.task
 
     def stop(self,reason='用户取消',result='canceled',recoverable=False):
-        self.retreat=None;self.state['recovery']=None
-        self.data_pause=None;self.state['data_pause']=None
         self.goal_attempt=getattr(self,'goal_attempt',0)+1
         if result=='canceled' and hasattr(self,'quality'):self.quality.cancel()
         idle_cancel=(result=='canceled' and self.phase=='idle' and not self.lease.active and not self.state['busy'])
         task=self.lease.stop()
-        self.send('cancel_stationary' if recoverable else 'stop')
+        self.send('stop' if result=='fault' and not recoverable else 'cancel_stationary')
         self.state['warning']=reason if recoverable else None
         if self.goal_handle:
             self.goal_handle.cancel_goal_async();self.goal_handle=None
-        self.params_ok=False;self.cmd=(0.,0.);self.cmd_at=-1e20
+        self.params_ok=False;self.cmd=(0.,0.,0.);self.cmd_at=-1e20
         self.initial_message=None
         if hasattr(self,'localization') and self.localization['status']=='pending':
             self.localization.update(status='canceled',reason=reason)
         self.phase='stopping';self.phase_at=time.monotonic();self.still_since=None
-        self.result_pending=result;self.state.update(status='正在停车：'+reason,command_velocity=[0.,0.],error=reason if result=='fault' and not recoverable else None)
+        self.result_pending=result;self.state.update(status='正在停车：'+reason,command_velocity=[0.,0.,0.],error=reason if result=='fault' and not recoverable else None)
         if idle_cancel:
             self.phase='idle'
             self.state.update(busy=False,result=result,status='已取消 · 当前没有活动导航任务',error=None)
         self.event(reason)
         # Task remains visible for audit, but the lease is irrevocably invalidated.
 
-    def pause_allowed(self, now, ros_now):
-        # Only scan/TF freshness may wait. Raw input, ownership and faults cannot.
-        q=self.quality
-        return (not self.sensors.error and now>=self.sensors.recovering_until
-                and all(self.count_publishers(t)==1 for t in
-                        ('/livox/lidar_front','/livox/lidar_back','/livox/imu_front',NS+'lio/odometry'))
-                and all(sensor_fresh(k,now-self.sensors.received.get(k,-1e20),
-                                     ros_now-self.sensors.stamps.get(k,-1e20)) for k in ('front','back','imu','lio'))
-                and 0<=now-self.executor_at<.3 and self.executor_state.get('rights')
-                and not self.executor_state.get('fault')
-                and not q.monitor.invalid and q.monitor.state.get('status')=='trusted'
-                and q.recovery.status in ('idle','succeeded')
-                and not self.confidence.blocked and self.amcl_active and now-self.amcl_lifecycle_at<3
-                and self.active_lifecycle and now-self.lifecycle_at<3)
-
-    def pause_for_data(self, now):
-        self.goal_attempt+=1  # Invalidate old action callbacks without losing browser heartbeat.
-        self.data_pause=dict(started=now,good_since=None,goal=list(self.state['goal']),
-                             speed=self.state['requested_speed'],owner=self.lease.owner,attempt=self.goal_attempt-1)
-        self.phase='paused';self.cmd=(0.,0.);self.cmd_at=-1e20
-        self.send('cancel_stationary')
-        if self.goal_handle:
-            self.goal_handle.cancel_goal_async();self.goal_handle=None
-        self.state.update(command_velocity=[0.,0.],status='数据过期：暂停停车，等待恢复',
-                          warning='扫描或 TF 过期；最多等待 10 秒，连续恢复 2 秒后重新规划')
-        self.event('扫描或 TF 过期：暂停原目标并请求停车')
-
-    def tick_data_pause(self, now, ros_now, healthy):
-        p=self.data_pause
-        if not p:return
-        if not self.pause_allowed(now,ros_now):
-            self.stop('暂停期间出现非扫描/TF故障，已取消；请手动重新提交','fault',recoverable=True);return
-        if now-p['started']>=10:
-            self.stop('数据恢复等待超过 10 秒，已取消；请手动重新提交','canceled',recoverable=True);return
-        good=(healthy and self.quality.monitor.state.get('status')=='trusted'
-              and self.executor_state.get('stationary') and not self.executor_state.get('holding')
-              and self.executor_state.get('task') is None and self.action_finished)
-        if not good:p['good_since']=None
-        elif p['good_since'] is None:p['good_since']=now
-        elapsed=0. if p['good_since'] is None else now-p['good_since']
-        self.state['data_pause']=dict(status='waiting',elapsed=round(now-p['started'],2),
-                                      healthy_seconds=round(elapsed,2),timeout=10,recovery_seconds=2)
-        self.state['status']='暂停等待：恢复确认 %.1f / 2 秒（等待 %.1f / 10 秒）'%(elapsed,now-p['started'])
-        if good and elapsed>=2:
-            obj=dict(zip(('x','y','yaw'),p['goal']),owner=p['owner'],speed=p['speed'])
-            self.data_pause=None;self.state['data_pause']=None
-            self.lease.stop();self.phase='idle'
-            self.state.update(initialized=True,ready=True,busy=False)
-            self.localization.update(status='succeeded',reason=None)
-            try:
-                recovery_attempts=getattr(self,'recovery_attempts',0)
-                self.begin(obj)
-                self.recovery_attempts=recovery_attempts
-                self.event('数据连续恢复 2 秒且底盘静止：从当前位置重新规划原目标')
-            except Exception as exc:self.stop('恢复重新规划失败：'+str(exc),'failed',recoverable=True)
+    def localization_advisory(self):
+        """Why the advisory localization checks are not passing (display only)."""
+        if self.confidence.blocked:
+            return '定位置信度：'+str(self.confidence.details.get('reason') or '等待稳定确认')
+        q=self.state.get('localization_quality') or {}
+        if q.get('status')!='trusted':
+            return '扫描与地图匹配：'+str(q.get('reason') or q.get('status') or '等待结果')
+        return 'AMCL 未按运动门槛输出新结果'
 
     def localize(self,obj):
         # A manual request replaces any automatic recovery transaction.
@@ -248,7 +197,10 @@ class Web(Node):
         reasons=[];now=time.monotonic()
         if self.sensors.error:reasons.append(self.sensors.error)
         if not self.sensors.healthy():reasons.append('双雷达、IMU、里程计或扫描未就绪/已过期')
-        if not self.amcl_active or now-self.amcl_lifecycle_at>=3:reasons.append('AMCL 尚未激活')
+        if not self.amcl_active or now-self.amcl_lifecycle_at>=3:
+            # Lifecycle bring-up is all-or-nothing: any Nav2 node failing to
+            # configure leaves AMCL inactive. The cause is in nav2.log.
+            reasons.append('AMCL 尚未激活（启动超过 30 秒仍如此时，查看 %s 中的 Failed/error）'%(self.run/'nav2.log'))
         if self.initial.get_subscription_count()<1:reasons.append('AMCL 初始位姿订阅尚未连接')
         scan=self.sensors.latest_scan
         if scan is None:reasons.append('缺少可用扫描')
@@ -281,26 +233,59 @@ class Web(Node):
             raise ValueError('当前朝向下整机轮廓与地图障碍或未知区域相交')
         return values
 
-    def begin(self,obj):
+    def odom_pose(self):
+        matrix=self.sensors.last_pose[1]
+        return [matrix[0,3],matrix[1,3],math.atan2(matrix[1,0],matrix[0,0])]
+
+    def reached(self):
+        return (at_goal(self.state['pose'],self.state['goal'],self.tolerances)
+                and (self.relative_odom_goal is None or
+                     at_goal(self.odom_pose(),self.relative_odom_goal,self.tolerances)))
+
+    def begin(self,obj,relative=False):
         if self.mode not in ('hardware','mock'):raise ValueError('观察模式不发送运动任务；需先完成现场验证')
         if not self.state['ready'] or not self.state['initialized'] or self.phase!='idle':raise ValueError('定位、执行器或任务尚未就绪')
-        value=speed(obj['speed']);params=controller_parameters(value);values=self.values(obj)
+        # Scan-match quality and covariance are checked once, here. During a
+        # running task they are shown as warnings and never stop the robot.
+        if not self.state.get('localization_trusted'):
+            raise ValueError('定位质量未通过，暂不提交目标：'+self.localization_advisory()+'；持续不通过请重新初始化')
+        odom_goal=None
+        tolerances=(GOAL_XY,GOAL_YAW)
+        if relative:
+            dx,dy,turn=(float(obj[k]) for k in ('dx','dy','dyaw'))
+            values=relative_goal(self.state['pose'],dx,dy,turn)
+            obj=dict(obj,**dict(zip(('x','y','yaw'),values)))
+            odom_goal=relative_goal(self.odom_pose(),dx,dy,turn)
+            distance=math.hypot(dx,dy)
+            tolerances=(min(GOAL_XY,distance/4) if distance else GOAL_XY,
+                        min(GOAL_YAW,abs(turn)/4) if turn else GOAL_YAW)
+        value=speed(obj['speed']);values=self.values(obj)
         if self.state.get('pose') is None or not safe_pose(self.grid,self.state['pose'],self.config['footprint'],self.config['footprint_padding']):
             raise ValueError('当前位置不满足加大后的机身避障余量；请核对定位与现场位置，在宽敞处重新初始化，勿用修改定位代替实际移车')
         if value>self.config['max_speed']:raise ValueError('超过配置的导航最高速度')
         if not self.parameters.service_is_ready():raise ValueError('控制器参数服务尚未就绪')
         task=self.lease.begin(obj['owner'],time.monotonic())
+        self.relative_odom_goal=odom_goal;self.tolerances=tolerances
         if hasattr(self,'quality') and self.quality.recovery.status=='succeeded':self.quality.recovery.cancel()
-        self.retreat=None;self.recovery_attempts=0;self.state['recovery']=None
         self.state['warning']=None
         self.state.update(route_execution=None,task=task,owner=obj['owner'],busy=True,goal=values,requested_speed=value,result=None,error=None,status='正在确认导航速度')
-        self.phase='preparing';self.phase_at=time.monotonic();self.params_ok=False;self.goal_sent=False
-        self.cmd=(0.,0.);self.cmd_at=-1e20
-        self.send('prepare',task=task,speed=value)
+        self.params_ok=False
+        self.prepare_navigation(time.monotonic())
+
+    def prepare_navigation(self,now):
+        task=self.lease.task;value=self.state['requested_speed']
+        self.phase='preparing';self.phase_at=now;self.goal_sent=False
+        self.cmd=(0.,0.,0.);self.cmd_at=-1e20
+        if self.params_ok:return
+        if self.parameter_request is not None:
+            previous=self.parameter_request;self.parameter_request=None
+            previous.cancel()
+        params=controller_parameters(value,self.tolerances)
         request=SetParametersAtomically.Request();request.parameters=[Parameter(k,value=v).to_parameter_msg() for k,v in params.items()]
-        future=self.parameters.call_async(request)
+        self.parameter_request=future=self.parameters.call_async(request)
         def applied(f):
-            if not self.valid(task):return
+            if self.parameter_request is not f or not self.valid(task):return
+            self.parameter_request=None
             try:
                 result=f.result().result
                 if not result.successful:raise RuntimeError(result.reason)
@@ -312,87 +297,54 @@ class Web(Node):
         task=self.lease.task;values=self.state['goal']
         nav_log=self.run/'nav2.log'
         log_offset=nav_log.stat().st_size if nav_log.exists() else 0
-        self.goal_attempt+=1;attempt=self.goal_attempt;self.action_finished=False
+        self.goal_attempt+=1;attempt=self.goal_attempt
         def current():return self.valid(task) and self.goal_attempt==attempt
-        msg=NavigateToPose.Goal();msg.pose.header.frame_id=FRAME['map'];msg.pose.header.stamp=self.get_clock().now().to_msg()
-        msg.pose.pose.position.x,msg.pose.pose.position.y=values[:2]
-        msg.pose.pose.orientation.z=math.sin(values[2]/2);msg.pose.pose.orientation.w=math.cos(values[2]/2)
+        def stamped(values):
+            pose=PoseStamped();pose.header.frame_id=FRAME['map'];pose.header.stamp=self.get_clock().now().to_msg()
+            pose.pose.position.x,pose.pose.position.y=values[:2]
+            pose.pose.orientation.z=math.sin(values[2]/2);pose.pose.orientation.w=math.cos(values[2]/2)
+            return pose
+        direct=self.relative_odom_goal is not None
+        if direct:
+            # A nudge follows this single segment and cannot replan into a detour.
+            msg=FollowPath.Goal();msg.controller_id='Nudge';msg.goal_checker_id='goal_checker'
+            msg.path.poses=[stamped(self.state['pose']),stamped(values)]
+            msg.path.header=msg.path.poses[0].header
+            client=self.follow
+        else:
+            msg=NavigateToPose.Goal();msg.pose=stamped(values);client=self.action
         self.goal_sent=True;self.phase='accepting';self.phase_at=time.monotonic()
         def feedback(m):
             if current():
                 self.nav_feedback_at=time.monotonic()
-                self.state['distance_remaining']=float(m.feedback.distance_remaining)
-        future=self.action.send_goal_async(msg,feedback_callback=feedback)
+                self.state['distance_remaining']=float(m.feedback.distance_to_goal if direct else m.feedback.distance_remaining)
+        future=client.send_goal_async(msg,feedback_callback=feedback)
+        def finished(done):
+            if not current():return
+            try:
+                result=done.result().status
+                self.goal_handle=None
+                # Retries and recoveries belong to the Nav2 behavior tree. An
+                # abort here means they are exhausted: end the task.
+                reason='目标已到达，等待底盘静止' if result==4 else nav2_failure_reason(nav_log,result,log_offset)
+                self.stop(reason,'succeeded' if result==4 else 'failed',recoverable=True)
+            except Exception as exc:self.stop(str(exc),'fault',recoverable=True)
         def accepted(f):
             try:
                 handle=f.result()
-                if not current():
-                    if handle.accepted:handle.cancel_goal_async()
+                if not handle.accepted:
+                    if current():self.stop('Nav2 未接受目标','failed',recoverable=True)
                     return
-                if not handle.accepted:raise RuntimeError('Nav2 拒绝目标')
-                self.goal_handle=handle;self.phase='running';self.cmd_at=time.monotonic();self.nav_feedback_at=self.cmd_at
+                if not current():
+                    handle.cancel_goal_async()
+                    return
+                self.goal_handle=handle;self.phase='running';self.cmd=(0.,0.,0.)
+                self.cmd_at=time.monotonic();self.nav_feedback_at=self.cmd_at
                 self.state['status']='真机导航中'
-                def finished(done):
-                    if self.goal_attempt==attempt or (self.data_pause and self.data_pause['attempt']==attempt):self.action_finished=True
-                    if not current():return
-                    try:
-                        result=done.result().status
-                        if result==4:
-                            pose=self.state['pose'];goal=self.state['goal']
-                            if pose is None or math.dist(pose[:2],goal[:2])>.15 or abs(math.atan2(math.sin(pose[2]-goal[2]),math.cos(pose[2]-goal[2])))>.08:
-                                raise RuntimeError('Nav2 返回成功但当前位姿不满足到点判据')
-                        reason='目标已到达，等待底盘静止' if result==4 else nav2_failure_reason(nav_log,result,log_offset)
-                        if recoverable_navigation_failure(result,reason,self.recovery_attempts):
-                            self.start_retreat(reason)
-                        else:self.stop(reason, 'succeeded' if result==4 else 'failed',recoverable=True)
-                    except Exception as exc:self.stop(str(exc),'fault',recoverable=True)
                 handle.get_result_async().add_done_callback(finished)
             except Exception as exc:
                 if current():self.stop(str(exc),'fault',recoverable=True)
         future.add_done_callback(accepted)
-
-    def start_retreat(self,reason):
-        self.recovery_attempts+=1;self.goal_attempt+=1;self.goal_handle=None
-        self.retreat=Retreat(time.monotonic(),speed=min(.03,self.state['requested_speed']))
-        self.phase='recovering';self.cmd=(0.,0.);self.cmd_at=-1e20
-        self.send('command',task=self.lease.task,v=0.,w=0.)
-        self.state['status']='恢复 %d/2：确认停车后检查后方空间'%self.recovery_attempts
-        self.event('导航恢复：'+reason)
-
-    def retreat_clearance(self,distance):
-        clouds=[];now=self.get_clock().now().nanoseconds*1e-9
-        if self.sensors.last_pose is None:return False,'缺少当前里程计姿态'
-        current=self.sensors.last_pose[1]
-        for key in ('front','back'):
-            if key not in self.sensors.recovery_clouds:return False,'等待完整前后障碍点云'
-            stamp,points=self.sensors.recovery_clouds[key]
-            if not -.05<=now-stamp<=.5:return False,'回退检测的实时点云已过期'
-            with self.sensors.geometry_lock:old=self.sensors.geometry.at(stamp)
-            if old is None:return False,'回退检测缺少点云时刻的里程计'
-            origin=self.sensors.geometry.base_lidar[:3,3].copy()
-            if key=='back':origin+=self.sensors.geometry.base_lidar[:3,:3]@np.asarray(self.config['rear_origin_in_front'])
-            world=(points+origin)@old[:3,:3].T+old[:3,3]
-            clouds.append((world-current[:3,3])@current[:3,:3])
-        if self.state['pose'] is None:return False,'缺少当前地图定位'
-        return backup_clearance(self.grid,self.state['pose'],self.config['footprint'],self.config['footprint_padding'],distance,clouds)
-
-    def tick_retreat(self,now):
-        try:
-            tracking=self.executor_state.get('tracking')
-            if not tracking or not 0<=now-tracking['sampled_at']<.3:
-                raise RuntimeError('恢复阶段缺少新鲜 SDK 位姿反馈')
-            if self.executor_state.get('task')!=self.lease.task:raise RuntimeError('恢复阶段底盘任务许可已失效')
-            v=self.retreat.step(now,tracking['feedback'],self.executor_state.get('stationary',False))
-            if v<0 or self.retreat.phase=='backing':
-                clear,why=self.retreat_clearance(max(0.,self.retreat.distance-self.retreat.progress))
-                if not clear:raise RuntimeError('无法安全回退：'+why)
-            self.send('backup_command' if v<0 else 'command',task=self.lease.task,v=v,w=0.)
-            self.state['command_velocity']=[v,0.]
-            self.state['recovery']=dict(attempt=self.recovery_attempts,maximum_attempts=2,**self.retreat.snapshot())
-            self.state['status']={'stopping':'恢复：确认底盘停稳','backing':'恢复：低速回退 %.2f / 0.15 m'%self.retreat.progress,'settling':'恢复：回退完成，确认停稳','replanning':'恢复：从当前位置重新规划'}[self.retreat.phase]
-            if self.retreat.phase=='replanning':
-                self.retreat=None;self.submit_goal();self.event('回退停稳，重新规划原导航目标')
-        except Exception as exc:self.stop(str(exc),'failed',recoverable=True)
 
     def tick(self):
         with self.lock:
@@ -421,6 +373,7 @@ class Web(Node):
                 try:
                     if name=='localize':self.localize(obj)
                     elif name=='goal':self.begin(obj)
+                    elif name=='nudge':self.begin(obj,relative=True)
                 except Exception as exc:self.state['error']=str(exc);self.event(str(exc))
         except queue.Empty:pass
         if now-self.last_lifecycle>1 and not self.lifecycle_pending and self.lifecycle.service_is_ready():
@@ -450,11 +403,19 @@ class Web(Node):
                                            and self.quality.monitor.state.get('status')=='trusted'
                                            and self.amcl_active and now-self.amcl_lifecycle_at<3, self.state['initialized'])
         self.state['localization_confidence']=self.confidence.snapshot()
-        localized=quality_ok and tf_ok and amcl_current and confidence_ok and self.amcl_active and now-self.amcl_lifecycle_at<3
-        settled=self.convergence.update(localized,now)
+        # Hard condition: a live map->base transform from an active AMCL (AMCL
+        # republishes map->odom on every scan, also while standing still).
+        # Scan-match quality, covariance and amcl_pose cadence are advisory:
+        # they gate initialization and goal submission, never a running task.
+        localized=tf_ok and self.amcl_active and now-self.amcl_lifecycle_at<3
+        trusted=bool(localized and quality_ok and amcl_current and confidence_ok)
+        self.state['localization_trusted']=trusted
+        self.state['localization_warning']=None if trusted or not self.state['initialized'] else self.localization_advisory()
+        settled=self.convergence.update(trusted,now)
         healthy=self.state['sensors_ready'] and localized
-        execution=(self.mode=='observe' or (now-self.executor_at<.3 and not self.executor_state.get('fault') and not self.executor_state.get('holding') and self.executor_state.get('rights')))
-        self.state['ready_checks']=dict(amcl_confidence=self.confidence.snapshot(),localization_quality=quality_ok,amcl_update_expected_ok=amcl_current,sensors=self.state['sensors_ready'],tf=tf_ok,tf_age=round(tf_age,3) if tf_age is not None else None,amcl_source_age=round(ros_now-self.amcl_stamp,3),amcl_age=round(now-self.amcl_at,3),amcl_covariance=self.amcl_cov if math.isfinite(self.amcl_cov) else None,executor=bool(execution),lifecycle=self.active_lifecycle,lifecycle_age=round(now-self.lifecycle_at,3),amcl_active=self.amcl_active,amcl_lifecycle_age=round(now-self.amcl_lifecycle_at,3))
+        executor_alive=(self.mode=='observe' or (now-self.executor_at<1. and not self.executor_state.get('fault') and bool(self.executor_state.get('rights'))))
+        execution=executor_alive and (self.mode=='observe' or (now-self.executor_at<.3 and not self.executor_state.get('holding')))
+        self.state['ready_checks']=dict(localization_trusted=trusted,amcl_confidence=self.confidence.snapshot(),localization_quality=quality_ok,amcl_update_expected_ok=amcl_current,sensors=self.state['sensors_ready'],tf=tf_ok,tf_age=round(tf_age,3) if tf_age is not None else None,amcl_source_age=round(ros_now-self.amcl_stamp,3),amcl_age=round(now-self.amcl_at,3),amcl_covariance=self.amcl_cov if math.isfinite(self.amcl_cov) else None,executor=bool(execution),lifecycle=self.active_lifecycle,lifecycle_age=round(now-self.lifecycle_at,3),amcl_active=self.amcl_active,amcl_lifecycle_age=round(now-self.amcl_lifecycle_at,3))
         self.state['ready']=bool(self.state['initialized'] and healthy and execution and self.active_lifecycle and now-self.lifecycle_at<3)
         self.state['velocity']=self.sensors.velocity
         self.state['localization_covariance']=self.amcl_cov if math.isfinite(self.amcl_cov) else None
@@ -463,7 +424,7 @@ class Web(Node):
         else:self.state['mode_label']='真机观察' if self.mode=='observe' else '真机控制'
         self.state['sensor_health']={k:round(now-v,3) for k,v in self.sensors.received.items()}
         self.state['executor']=self.executor_state
-        self.state['applied_command_velocity']=self.executor_state.get('command',[0.,0.]) if 0<=now-self.executor_at<.3 else [0.,0.]
+        self.state['applied_command_velocity']=self.executor_state.get('command',[0.,0.,0.]) if 0<=now-self.executor_at<.3 else [0.,0.,0.]
         self.state['owner']=self.lease.owner;self.state['phase']=self.phase
         if self.initial_message:
             if self.sensors.error:
@@ -478,58 +439,52 @@ class Web(Node):
                 self.finish_localization('failed','定位初始化超时：'+'；'.join(reasons or ['定位尚未稳定']))
             elif self.amcl_stamp>self.initial_stamp and healthy and settled:
                 self.finish_localization('succeeded','定位就绪；观察模式' if self.mode=='observe' else '定位就绪，可以开始导航')
-        elif self.state['initialized'] and (not localized or self.sensors.error):
-            recoverable=not self.sensors.error
-            reason=('定位置信度不足：'+str(self.confidence.details.get('reason') or '等待稳定确认') if self.confidence.blocked else
-                    ('扫描与地图匹配不可用' if not quality_ok else '定位数据或变换过期')) if recoverable else '定位或传感器失效，请重新初始化'
+        elif self.state['initialized'] and self.sensors.error:
+            reason='定位或传感器失效，请重新初始化'
             self.state.update(initialized=False,status=reason)
-            self.localization.update(status='recovering' if recoverable else 'invalidated',reason=reason)
-        elif (self.localization.get('status')=='recovering' and settled and healthy
-              and not self.state['busy'] and self.phase=='idle'):
-            # Reconfirm the same filter estimate; never resubmit a motion goal.
-            self.state.update(initialized=True,error=None,status='定位恢复；观察模式' if self.mode=='observe' else '定位恢复；请重新提交导航目标')
-            self.localization.update(status='succeeded',reason=None)
+            self.localization.update(status='invalidated',reason=reason)
         elif self.state['initialized'] and not self.state['sensors_ready'] and not self.state['busy']:
             self.state['status']='定位有效；等待新鲜传感器数据，暂不允许运动'
         elif self.state['initialized'] and healthy and not self.state['busy'] and self.phase=='idle':
-            self.state['status']=('定位就绪；观察模式' if self.mode=='observe' else '定位就绪，可以开始导航') if execution else '定位有效；执行器未就绪：'+str(self.executor_state.get('fault') or ('正在确认底盘静止' if self.executor_state.get('holding') else '状态超时/无控制权'))
-        if self.confidence.status=='warning':self.state['status']='定位不确定性短时偏大，扫描匹配正常，正在确认'
+            if not execution:
+                self.state['status']='定位有效；执行器未就绪：'+str(self.executor_state.get('fault') or ('正在确认底盘静止' if self.executor_state.get('holding') else '状态超时/无控制权'))
+            elif not trusted:
+                self.state['status']='定位质量告警：'+self.state['localization_warning']+'；通过后才能提交新目标'
+            else:
+                self.state['status']='定位就绪；观察模式' if self.mode=='observe' else '定位就绪，可以开始导航'
         self.state['localization']=dict(self.localization)
         if self.lease.active:
-            if not self.valid(self.lease.task):self.stop('控制浏览器失联','fault',recoverable=True)
-            elif self.phase=='paused':self.tick_data_pause(now,ros_now,healthy)
-            elif (self.phase=='running' and (not tf_ok or not sensor_fresh('scan',now-self.sensors.received.get('scan',-1e20),ros_now-self.sensors.stamps.get('scan',-1e20)))
-                  and self.pause_allowed(now,ros_now)):
-                self.pause_for_data(now)
-            elif not self.state['ready']:
-                checks=self.state['ready_checks'];reasons=[]
-                if not checks['sensors']:
+            # Supervision only. Nav2 drives the executor directly; this page
+            # cancels the goal when a hard condition stays bad for 1 s.
+            hard=dict(sensors=self.state['sensors_ready'] and not self.sensors.error,localization=localized,
+                      executor=executor_alive,nav2=self.active_lifecycle and now-self.lifecycle_at<3)
+            if all(hard.values()):self.fault_since=None
+            elif getattr(self,'fault_since',None) is None:self.fault_since=now
+            if self.fault_since is not None and now-self.fault_since>=1.:
+                reasons=[]
+                if not hard['sensors']:
                     ages={k:round(ros_now-v,3) for k,v in self.sensors.stamps.items()}
-                    reasons.append('传感器未就绪，源数据年龄='+json.dumps(ages,ensure_ascii=False))
-                if not localized:reasons.append('定位未就绪，检查='+json.dumps(checks,ensure_ascii=False))
-                if not execution:reasons.append('执行器未就绪：'+str(self.executor_state.get('fault') or ('正在确认底盘静止' if self.executor_state.get('holding') else '状态超时/无控制权')))
-                if not self.active_lifecycle or now-self.lifecycle_at>=3:reasons.append('Nav2 未激活或状态超时')
-                self.stop('；'.join(reasons or ['定位尚未完成初始化']),'fault',recoverable=bool((execution or self.executor_state.get('rights')) and not self.executor_state.get('fault')))
-            elif self.phase=='recovering':self.tick_retreat(now)
-            elif self.phase in ('preparing','accepting'):
-                self.send('command',task=self.lease.task,v=0.,w=0.)
-                if now-self.phase_at>5:self.stop('导航准备超时','fault',recoverable=True)
-                elif self.phase=='preparing' and self.params_ok and self.executor_state.get('task')==self.lease.task and self.executor_state.get('speed')==self.state['requested_speed']:
-                    self.submit_goal()
-            elif self.phase=='running' and self.executor_state.get('task')!=self.lease.task:
-                self.stop(self.executor_state.get('warning') or '执行器已取消任务，请重新提交','fault',recoverable=True)
+                    reasons.append(self.sensors.error or '传感器断流，源数据年龄='+json.dumps(ages,ensure_ascii=False))
+                if not hard['localization']:reasons.append('map→base 变换超时或 AMCL 未激活')
+                if not hard['executor']:reasons.append('执行器故障：'+str(self.executor_state.get('fault') or '状态超时/无控制权'))
+                if not hard['nav2']:reasons.append('Nav2 未激活或状态超时')
+                self.fault_since=None
+                self.stop('；'.join(reasons),'fault',recoverable=not self.executor_state.get('fault'))
+            elif self.phase=='preparing':
+                if now-self.phase_at>15:self.stop('控制器速度参数设置超时','fault',recoverable=True)
+                elif self.params_ok:self.submit_goal()
+            elif self.phase=='accepting':
+                if now-self.phase_at>15:self.stop('Nav2 未在 15 秒内接受目标','fault',recoverable=True)
             elif self.phase=='running':
-                try:
-                    command=navigation_command(self.cmd,now-self.cmd_at,now-self.nav_feedback_at)
-                    self.send('command',task=self.lease.task,v=command[0],w=command[1]);self.state['command_velocity']=list(command)
-                    self.state['status']='控制器输出零速度：正在确认朝向、路径或碰撞条件' if command==(0.,0.) else '真机导航中'
-                except RuntimeError as exc:self.stop(str(exc),'fault',recoverable=True)
+                command=self.cmd if now-self.cmd_at<.5 else (0.,0.,0.)
+                self.state['command_velocity']=list(command)
+                self.state['status']='控制器输出零速度：正在确认朝向、路径或碰撞条件' if not any(command) else '真机导航中'
         mean_motion=self.sensors.settling.mean(now)
         self.state['warnings']=[]
         if self.executor_state.get('warning') and self.phase!='paused':self.state['warnings'].append(self.executor_state['warning'])
         if (self.executor_state.get('stationary',False) and mean_motion is not None and
             mean_motion[0]<.03 and mean_motion[1]<.03 and
-            (self.sensors.planar_speed>=.02 or abs(self.sensors.velocity[1])>=.03)):
+            (self.sensors.planar_speed>=.02 or abs(self.sensors.velocity[2])>=.03)):
             self.state['warnings'].append('里程计瞬时抖动；SDK 位置稳定，仅告警')
         if time.monotonic()-now>.05:
             self.state['warnings'].append('页面处理超过 50 ms；仅性能告警')
@@ -554,12 +509,13 @@ class Web(Node):
             if still:
                 if self.still_since is None:self.still_since=now
                 elif now-self.still_since>=.5:
+                    if self.result_pending=='succeeded' and (not localized or not self.reached()):
+                        self.result_pending='failed'
+                        self.state['error']='停车后位姿超出目标容差'
                     self.phase='idle';self.state.update(busy=False,result=self.result_pending,status='已静止 · '+str(self.result_pending))
                     if self.state['error']=='未能确认停车，请检查现场状态':self.state['error']=None
             else:self.still_since=None
             if self.phase=='stopping' and now-self.phase_at>5:self.state['error']='未能确认停车，请检查现场状态'
-        if (self.quality.recovery.status=='succeeded' and self.state['initialized'] and not self.state['busy']
-                and self.phase=='idle' and execution):self.state['status']='定位恢复，请重新提交目标'
         if self.sensors.error:self.state['error']=self.sensors.error
         if now-self.last_sample>.2:
             self.last_sample=now
@@ -647,9 +603,10 @@ def server(node,port):
                         # browser's last state snapshot. Never renew that task.
                         if node.lease.owner==obj['owner'] and (not node.lease.active or node.lease.task!=obj['task']):
                             return self.output(202,b'{"superseded":true}')
-                        if not node.lease.heartbeat(obj['owner'],obj['task'],time.monotonic()):raise ValueError('控制许可已失效')
-                elif name in ('localize','goal'):
-                    if name=='goal':controller_parameters(obj['speed'])
+                        # Ownership bookkeeping only; a late heartbeat never stops motion.
+                        node.lease.until=time.monotonic()+BROWSER_LEASE_SECONDS
+                elif name in ('localize','goal','nudge'):
+                    if name!='localize':controller_parameters(obj['speed'])
                     with node.lock:node.requests.put_nowait((name,obj,node.request_epoch))
                 else:raise ValueError('Unknown endpoint')
                 self.output(202,b'{"queued":true}')
