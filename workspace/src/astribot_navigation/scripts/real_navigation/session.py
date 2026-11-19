@@ -46,9 +46,15 @@ def nav_params(config,mapfile,replay):
                          max_iterations=1000000,max_on_approach_iterations=1000,max_planning_time=2.0,
                          cost_travel_multiplier=2.0,use_final_approach_orientation=False,
                          smoother=dict(max_iterations=1000,w_smooth=.3,w_data=.2,tolerance=1e-10))
+    # Only queried after the full route fails. A map-wide search tolerance lets
+    # Smac return its closest reachable cell within its search budget. This
+    # planner's endpoint is never used as the navigation success condition.
+    ps['planner_plugins']=['GridBased','Approach']
+    ps['Approach']=dict(ps['GridBased'],tolerance=1.0e6,use_final_approach_orientation=True,
+                        smoother=dict(ps['GridBased']['smoother']))
     cp=base['controller_server']['ros__parameters']
     horizon=config.get('collision_time_horizon',1.5)
-    cp['controller_plugins']=['FollowPath','Nudge']
+    cp['controller_plugins']=['FollowPath','Nudge','FinalNudge']
     cp['FollowPath']=dict(
         plugin='nav2_mppi_controller::MPPIController', motion_model='Omni',
         model_dt=.05, time_steps=max(1, round(horizon/.05)), batch_size=512,
@@ -58,6 +64,7 @@ def nav_params(config,mapfile,replay):
                  'GoalCritic','GoalAngleCritic'],
         CostCritic=dict(consider_footprint=True))
     cp['Nudge']=dict(plugin='towergo::OmniController',desired_linear_vel=.05,collision_time_horizon=horizon)
+    cp['FinalNudge']=dict(cp['Nudge'])
     # A 180 deg in-place turn at 0.3 rad/s takes ~11 s without XY progress.
     cp['progress_checker'].update(required_movement_radius=.05,movement_time_allowance=20.)
     cp['odom_topic']='/towergo/nav/odom'
@@ -93,7 +100,7 @@ def nav_params(config,mapfile,replay):
     bt.update(default_server_timeout=1000,bt_loop_duration=50)
     bt['default_nav_through_poses_bt_xml']=str(REPO/'astribot_nav_bringup/config/navigation_through.xml')
     bt['default_nav_to_pose_bt_xml']=str(HERE/'navigation.xml')
-    bt['plugin_lib_names']=['nav2_compute_path_through_poses_action_bt_node','nav2_compute_path_to_pose_action_bt_node','nav2_follow_path_action_bt_node','nav2_pipeline_sequence_bt_node',
+    bt['plugin_lib_names']=['towergo_final_approach_bt_node','nav2_compute_path_through_poses_action_bt_node','nav2_compute_path_to_pose_action_bt_node','nav2_follow_path_action_bt_node','nav2_pipeline_sequence_bt_node',
         'nav2_rate_controller_bt_node','nav2_is_path_valid_condition_bt_node','nav2_goal_updated_controller_bt_node',
         'nav2_globally_updated_goal_condition_bt_node','nav2_path_expiring_timer_condition',
         'nav2_recovery_node_bt_node','nav2_round_robin_node_bt_node',

@@ -1,0 +1,17 @@
+{
+  "name": "pose_20261120_0604",
+  "recorded_at": "2026-11-20T06:04:40+08:00",
+  "frame_id": "tg_nav_map",
+  "map": "/home/astribot/TowerGO/S1_locomotion/workspace/data/maps/manual_edit_20261105_speckle_fill/map.yaml",
+  "map_sha256": "ac579de3851ff931abb9cd0c2ada183640d0d2fd13d26893207e46bc1bd092bb",
+  "image_sha256": "c3b2182ef376d03a86d90466fae8787c9576ba7b8947ed68fce254ff46ddb51a",
+  "session": "navigation_20261120_060305_72d4fa",
+  "source": "localized robot pose",
+  "pose": {
+    "x": 0.5923814259655775,
+    "y": 0.11165817120194227,
+    "yaw": 0.8700837657896034
+  },
+  "yaw_deg": 49.85212760259348,
+  "goal_speed_m_s": 0.15
+}

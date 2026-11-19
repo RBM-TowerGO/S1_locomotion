@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <mutex>
 #include "nav2_core/controller.hpp"
 #include "nav2_core/exceptions.hpp"
@@ -16,6 +17,17 @@ static Pose planar(const geometry_msgs::msg::Pose & p) {
   return {p.position.x, p.position.y, tf2::getYaw(p.orientation)};
 }
 static double distance(Pose a, Pose b) {return std::hypot(a.x-b.x, a.y-b.y);}
+
+// First fraction of a projected XY step inside the goal circle.
+static double positionEntry(Pose from, Pose goal, double dx, double dy, double tolerance) {
+  const double gx=goal.x-from.x, gy=goal.y-from.y;
+  const double outside=gx*gx+gy*gy-tolerance*tolerance;
+  if (outside<=0.) return 0.;
+  const double along=gx*dx+gy*dy;
+  const double discriminant=along*along-(dx*dx+dy*dy)*outside;
+  if (along<=0. || discriminant<0.) return std::numeric_limits<double>::infinity();
+  return outside/(along+std::sqrt(discriminant));
+}
 
 class OmniController : public nav2_core::Controller {
   rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
@@ -105,13 +117,36 @@ public:
       std::hypot(vx,vy)>0 ? distance(p,t)/std::hypot(vx,vy) : 0.,
       w!=0 ? std::abs(towergo_route::angle(t.yaw-p.yaw)/w) : 0.));
     const int steps=std::max(1,int(std::ceil(duration*std::max(std::hypot(vx,vy),std::abs(w))/.01)));
+    const bool final_nudge=final && name_=="FinalNudge";
+    // Express the fixed goal in the same costmap frame as the swept footprint.
+    const double offset=local.yaw-p.yaw, c=std::cos(offset), s=std::sin(offset);
+    const Pose goal{local.x+c*dx-s*dy, local.y+s*dx+c*dy, t.yaw+offset};
+    const double dt=duration/steps;
+    bool holding_xy=false, reached=false;
     auto q=local;
     for (int i=0; i<=steps; ++i) {
       if (!towergo_route::footprint_free(map,footprint,q))
         throw nav2_core::PlannerException("Collision detected ahead");
-      const double dt=duration/steps, mid=q.yaw+w*dt*.5;
-      q.x+=dt*(vx*std::cos(mid)-vy*std::sin(mid));
-      q.y+=dt*(vx*std::sin(mid)+vy*std::cos(mid)); q.yaw+=dt*w;
+      if (reached || i==steps) break;  // includes the stopping footprint
+      const double mid=q.yaw+w*dt*.5;
+      double step_x=dt*(vx*std::cos(mid)-vy*std::sin(mid));
+      double step_y=dt*(vx*std::sin(mid)+vy*std::cos(mid));
+      double step_yaw=w*dt;
+      if (final_nudge) {
+        const double yaw_left=std::abs(towergo_route::angle(goal.yaw-q.yaw));
+        const double xy_entry=holding_xy ? 0. : positionEntry(q,goal,step_x,step_y,xy);
+        if (xy_entry<=1.) {
+          holding_xy=true;  // Nudge holds position while finishing the turn.
+          step_x*=xy_entry;
+          step_y*=xy_entry;
+          const double yaw_entry=yaw_left<=angle ? 0. :
+            (step_yaw!=0. ? (yaw_left-angle)/std::abs(step_yaw) : std::numeric_limits<double>::infinity());
+          const double stop=std::max(xy_entry,yaw_entry);
+          if (stop<=1.) {step_yaw*=stop; reached=true;}
+        }
+        step_yaw=std::copysign(std::min(std::abs(step_yaw),yaw_left),step_yaw);
+      }
+      q.x+=step_x; q.y+=step_y; q.yaw+=step_yaw;
     }
     geometry_msgs::msg::TwistStamped out;
     out.header.stamp=node_->now(); out.header.frame_id=costmap_->getBaseFrameID();

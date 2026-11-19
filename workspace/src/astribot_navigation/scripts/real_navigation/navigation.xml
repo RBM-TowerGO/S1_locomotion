@@ -1,22 +1,53 @@
-<!-- Reuse a valid route. On blockage, halt tracking and retry the same goal. -->
+<!-- Only the full route can hand off to FinalNudge at the requested goal. -->
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <RetryUntilSuccessful num_attempts="-1">
-      <Fallback>
-        <PipelineSequence>
-          <GoalUpdatedController>
-            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
-          </GoalUpdatedController>
-          <RateController hz="1.0">
-            <Fallback>
-              <IsPathValid path="{path}"/>
-              <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
-            </Fallback>
-          </RateController>
-          <FollowPath path="{path}" controller_id="FollowPath" goal_checker_id="goal_checker"/>
-        </PipelineSequence>
-        <Delay delay_msec="2000"><AlwaysFailure/></Delay>
-      </Fallback>
-    </RetryUntilSuccessful>
+    <FinalApproach goal="{goal}" distance="0.50" route="{path}" route_kind="{route_kind}" final_path="{final_path}">
+      <RetryUntilSuccessful num_attempts="-1">
+        <Fallback>
+          <PipelineSequence>
+            <RateController hz="1.0">
+              <Fallback>
+                <Sequence>
+                  <Fallback>
+                    <BlackboardCheckString value_A="{route_kind}" value_B="full" return_on_mismatch="FAILURE">
+                      <IsPathValid path="{path}"/>
+                    </BlackboardCheckString>
+                    <Sequence>
+                      <ComputePathToPose goal="{goal}" path="{candidate}" planner_id="GridBased"/>
+                      <IsPathValid path="{candidate}"/>
+                      <SetBlackboard output_key="path" value="{candidate}"/>
+                    </Sequence>
+                  </Fallback>
+                  <SetBlackboard output_key="route_kind" value="full"/>
+                </Sequence>
+                <Sequence>
+                  <ComputePathToPose goal="{goal}" path="{approach_path}" planner_id="Approach"/>
+                  <PrepareApproachTurn path="{approach_path}" goal="{goal}" turn="{next_turn}"/>
+                  <SetBlackboard output_key="route_kind" value="partial"/>
+                </Sequence>
+              </Fallback>
+            </RateController>
+            <Switch2 variable="{route_kind}" case_1="full" case_2="partial">
+              <FollowPath path="{path}" controller_id="FollowPath" goal_checker_id="goal_checker"/>
+              <ForceFailure>
+                <Sequence>
+                  <SetBlackboard output_key="turn_path" value="{next_turn}"/>
+                  <FollowPath path="{turn_path}" controller_id="Nudge" goal_checker_id="goal_checker"/>
+                  <FollowPath path="{approach_path}" controller_id="FollowPath" goal_checker_id="goal_checker"/>
+                </Sequence>
+              </ForceFailure>
+              <AlwaysFailure/>
+            </Switch2>
+          </PipelineSequence>
+          <Delay delay_msec="2000"><AlwaysFailure/></Delay>
+        </Fallback>
+      </RetryUntilSuccessful>
+      <RetryUntilSuccessful num_attempts="-1">
+        <Fallback>
+          <FollowPath path="{final_path}" controller_id="FinalNudge" goal_checker_id="goal_checker"/>
+          <Delay delay_msec="2000"><AlwaysFailure/></Delay>
+        </Fallback>
+      </RetryUntilSuccessful>
+    </FinalApproach>
   </BehaviorTree>
 </root>

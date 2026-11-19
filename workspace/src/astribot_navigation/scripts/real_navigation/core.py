@@ -109,6 +109,7 @@ def controller_parameters(value, tolerances=(GOAL_XY,GOAL_YAW)):
     if value == 0:
         raise ValueError('速度为 0：保持静止，不启动导航')
     return {'Nudge.desired_linear_vel': value,
+            'FinalNudge.desired_linear_vel': min(value, .05),
             **{'FollowPath.'+k: v for k, v in mppi_velocity_limits(value).items()},
             'goal_checker.xy_goal_tolerance': tolerances[0],
             'goal_checker.yaw_goal_tolerance': tolerances[1],

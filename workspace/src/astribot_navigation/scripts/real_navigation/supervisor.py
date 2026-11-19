@@ -9,6 +9,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
+from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, Twist
 from nav2_msgs.action import NavigateToPose, FollowPath
 from rcl_interfaces.srv import SetParametersAtomically
@@ -50,6 +51,8 @@ class NavigationSupervisor(Node):
         self.amcl_stamp=-1e20;self.initial_stamp=math.inf;self.initial_tf_ns=None;self.initial_tf_error=None
         self.active_lifecycle=False;self.lifecycle_at=-1e20;self.lifecycle_pending=False
         self.goal_attempt=0
+        self.tf_paused=False
+        self.tf_pause_attempt=None
         self.relative_odom_goal=None;self.tolerances=(GOAL_XY,GOAL_YAW)
         self.phase='idle';self.phase_at=0.;self.params_ok=False;self.goal_sent=False
         self.parameter_request=None
@@ -113,6 +116,7 @@ class NavigationSupervisor(Node):
         if result=='canceled' and hasattr(self,'quality'):self.quality.cancel()
         idle_cancel=(result=='canceled' and self.phase=='idle' and not self.lease.active and not self.state['busy'])
         task=self.lease.stop()
+        self.tf_paused=False
         self.send('stop' if result=='fault' and not recoverable else 'cancel_stationary')
         self.state['warning']=reason if recoverable else None
         if self.goal_handle:
@@ -315,6 +319,11 @@ class NavigationSupervisor(Node):
             try:
                 result=done.result().status
                 self.goal_handle=None
+                if result==GoalStatus.STATUS_ABORTED and self.tf_pause_attempt==attempt:
+                    # A delayed abort can arrive after TF recovers. Retry this attempt's
+                    # saved absolute target, including for a relative nudge.
+                    self.phase='preparing';self.phase_at=time.monotonic()
+                    return
                 # Retries and recoveries belong to the Nav2 behavior tree. An
                 # abort here means they are exhausted: end the task.
                 reason='目标已到达，等待底盘静止' if result==4 else nav2_failure_reason(nav_log,result,log_offset)
@@ -324,7 +333,10 @@ class NavigationSupervisor(Node):
             try:
                 handle=f.result()
                 if not handle.accepted:
-                    if current():self.stop('Nav2 未接受目标','failed',recoverable=True)
+                    if current():
+                        if self.tf_pause_attempt==attempt:
+                            self.phase='preparing';self.phase_at=time.monotonic()
+                        else:self.stop('Nav2 未接受目标','failed',recoverable=True)
                     return
                 if not current():
                     handle.cancel_goal_async()
@@ -402,11 +414,11 @@ class NavigationSupervisor(Node):
                                            and self.quality.monitor.state.get('status')=='trusted'
                                            and self.amcl_active and now-self.amcl_lifecycle_at<3, self.state['initialized'])
         self.state['localization_confidence']=self.confidence.snapshot()
-        # Hard condition: a live map->base transform from an active AMCL (AMCL
-        # republishes map->odom on every scan, also while standing still).
+        # AMCL republishes map->odom on every scan, also while standing still.
         # Scan-match quality, covariance and amcl_pose cadence are advisory:
         # they gate initialization and goal submission, never a running task.
-        localized=tf_ok and self.amcl_active and now-self.amcl_lifecycle_at<3
+        amcl_live=self.amcl_active and now-self.amcl_lifecycle_at<3
+        localized=tf_ok and amcl_live
         trusted=bool(localized and quality_ok and amcl_current and confidence_ok)
         self.state['localization_trusted']=trusted
         self.state['localization_warning']=None if trusted or not self.state['initialized'] else self.localization_advisory()
@@ -455,8 +467,17 @@ class NavigationSupervisor(Node):
         if self.lease.active:
             # Supervision only. Nav2 drives the executor directly; the supervisor
             # cancels the goal when a hard condition stays bad for 1 s.
-            hard=dict(sensors=self.state['sensors_ready'] and not self.sensors.error,localization=localized,
+            hard=dict(sensors=self.state['sensors_ready'] and not self.sensors.error,amcl=amcl_live,
                       executor=executor_alive,nav2=self.active_lifecycle and now-self.lifecycle_at<3)
+            # Hold only the chassis. An active Nav2 action keeps its path and controller.
+            pause=not tf_ok or (self.tf_paused and not all(hard.values()))
+            if pause!=self.tf_paused or pause!=self.executor_state.get('tf_paused',False):
+                self.send('tf_pause',paused=pause)
+            if pause!=self.tf_paused:
+                self.tf_paused=pause
+                if pause:self.tf_pause_attempt=self.goal_attempt
+                else:self.phase_at=now
+                self.event('地图 TF 滞后，暂停并保留目标' if pause else '地图 TF 已恢复，继续原目标')
             if all(hard.values()):self.fault_since=None
             elif getattr(self,'fault_since',None) is None:self.fault_since=now
             if self.fault_since is not None and now-self.fault_since>=1.:
@@ -464,11 +485,13 @@ class NavigationSupervisor(Node):
                 if not hard['sensors']:
                     ages={k:round(ros_now-v,3) for k,v in self.sensors.stamps.items()}
                     reasons.append(self.sensors.error or '传感器断流，源数据年龄='+json.dumps(ages,ensure_ascii=False))
-                if not hard['localization']:reasons.append('map→base 变换超时或 AMCL 未激活')
+                if not hard['amcl']:reasons.append('AMCL 未激活或状态超时')
                 if not hard['executor']:reasons.append('执行器故障：'+str(self.executor_state.get('fault') or '状态超时/无控制权'))
                 if not hard['nav2']:reasons.append('Nav2 未激活或状态超时')
                 self.fault_since=None
                 self.stop('；'.join(reasons),'fault',recoverable=not self.executor_state.get('fault'))
+            elif self.tf_paused:
+                self.state.update(status='等待地图 TF，已保留导航目标',command_velocity=[0.,0.,0.])
             elif self.phase=='preparing':
                 if now-self.phase_at>15:self.stop('控制器速度参数设置超时','fault',recoverable=True)
                 elif self.params_ok:self.submit_goal()
@@ -505,7 +528,9 @@ class NavigationSupervisor(Node):
                 sensors_ready=self.sensors.healthy(),sdk_feedback_age=round(now-self.executor_at,3),
                 sdk_holding=self.executor_state.get('holding',False),pending=pending,
                 lio_below_limit=bool(motion is not None and motion[0]<.03 and motion[1]<.03))
-            if still:
+            if still and self.result_pending=='succeeded' and amcl_live and not tf_ok:
+                self.state['status']='已停稳，等待地图 TF 确认到达目标'
+            elif still:
                 if self.still_since is None:self.still_since=now
                 elif now-self.still_since>=.5:
                     if self.result_pending=='succeeded' and (not localized or not self.reached()):
@@ -514,7 +539,7 @@ class NavigationSupervisor(Node):
                     self.phase='idle';self.state.update(busy=False,result=self.result_pending,status='已静止 · '+str(self.result_pending))
                     if self.state['error']=='未能确认停车，请检查现场状态':self.state['error']=None
             else:self.still_since=None
-            if self.phase=='stopping' and now-self.phase_at>5:self.state['error']='未能确认停车，请检查现场状态'
+            if self.phase=='stopping' and not still and now-self.phase_at>5:self.state['error']='未能确认停车，请检查现场状态'
         if self.sensors.error:self.state['error']=self.sensors.error
         if now-self.last_sample>.2:
             self.last_sample=now
@@ -525,10 +550,10 @@ class NavigationSupervisor(Node):
             self.state['pipeline']['queue']=self.sensors.worker.state()
             self.state['pipeline']['source_age_s']={k:round(ros_now-v,3) for k,v in self.sensors.stamps.items()}
 
-            self.state.update(phase=self.phase, sensor_error=self.sensors.error,
+            self.state.update(phase='paused' if self.tf_paused else self.phase, sensor_error=self.sensors.error,
                               scan_reference_ns=self.sensors.latest_scan_stamp_ns,
                               scan_source_stamp=self.sensors.latest_scan_source_stamp)
             if self.state_pub.get_subscription_count():
                 self.state_pub.publish(String(data=json.dumps(self.state, ensure_ascii=False)))
 
-            self.log.write(json.dumps(dict(time=time.time(),task=self.state['task'],phase=self.phase,pose=self.state['pose'],velocity=self.sensors.velocity,command=self.state['command_velocity'],result=self.state['result'],route_execution=self.state.get('route_execution'),executor=dict(self.executor_state),stop_checks=self.state.get('stop_checks'),recovery=self.state.get('recovery'),localization_quality=self.state.get('localization_quality'),localization_confidence=self.state.get('localization_confidence')),ensure_ascii=False)+'\n')
+            self.log.write(json.dumps(dict(time=time.time(),task=self.state['task'],phase=self.state['phase'],pose=self.state['pose'],velocity=self.sensors.velocity,command=self.state['command_velocity'],result=self.state['result'],route_execution=self.state.get('route_execution'),executor=dict(self.executor_state),stop_checks=self.state.get('stop_checks'),recovery=self.state.get('recovery'),localization_quality=self.state.get('localization_quality'),localization_confidence=self.state.get('localization_confidence')),ensure_ascii=False)+'\n')

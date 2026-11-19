@@ -149,11 +149,12 @@ def main():
         # hard speed cap; the per-goal speed is RPP's desired_linear_vel.
         # Drive.tick() stops the chassis 0.3 s after commands stop arriving.
         blocked_until=-math.inf;tasks=0
+        tf_paused=False
         def velocity(msg):
             nonlocal tasks
             try:
                 now=time.monotonic()
-                if now<blocked_until or drive.fault:return
+                if tf_paused or now<blocked_until or drive.fault:return
                 if any(v!=0 for v in (msg.linear.z,msg.angular.x,msg.angular.y)):
                     raise ValueError('只支持平面底盘指令')
                 v,vy,w=msg.linear.x,msg.linear.y,msg.angular.z
@@ -168,15 +169,21 @@ def main():
                 drive.stop(str(exc))
         from geometry_msgs.msg import Twist
         node.create_subscription(Twist,'cmd_vel_nav',velocity,10)
-        # Out-of-band stop requests from the web page (not a velocity path).
+        # Supervisor requests share this channel; Nav2 remains the sole velocity source.
         def control(msg):
-            nonlocal last_sequence,blocked_until
+            nonlocal last_sequence,blocked_until,tf_paused
             try:
                 data = json.loads(msg.data)
                 now = time.monotonic()
                 if data['sequence'] <= last_sequence or not 0 <= now-data['sent'] < .5:
                     return
                 last_sequence = data['sequence']
+                if data['op']=='tf_pause':
+                    if data['paused'] and not tf_paused:
+                        drive.suspend(now,'等待地图 TF',quiet=True)
+                    tf_paused=data['paused']
+                    return
+                tf_paused=False
                 # Ignore in-flight controller commands until Nav2 has cancelled.
                 blocked_until=now+1.
                 if data['op']=='stop':
@@ -209,7 +216,7 @@ def main():
                     else:settling.rows.clear()
                 except Exception:settling.rows.clear()
                 status.publish(String(data=json.dumps(dict(task=drive.task, speed=drive.limit, fault=drive.fault,
-                                                         command=command, rights=backend.has_control(),sent=now,tracking=drive.tracking,stationary=stationary,settling_span=span,warning=drive.warning,holding=drive.holding))))
+                                                         command=command, rights=backend.has_control(),sent=now,tracking=drive.tracking,stationary=stationary,settling_span=span,warning=drive.warning,holding=drive.holding,tf_paused=tf_paused))))
                 last_status=now
     except KeyboardInterrupt:
         pass
