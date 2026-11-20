@@ -2,8 +2,31 @@
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import math
 from pathlib import Path
 import threading
+
+
+def saved_points(session):
+    data = Path(__file__).resolve().parents[4] / 'data'
+    if not session or Path(session).name != session or not session.startswith('navigation_'):
+        raise ValueError('导航会话无效')
+    report = json.loads((data / 'reports/real_navigation' / session / 'session.json').read_text())
+    directory = data / 'waypoints' / Path(report['map']).parent.name
+    points = []
+    for path in sorted(directory.glob('*.json')):
+        try:
+            record = json.loads(path.read_text())
+            if record['frame_id'] != 'tg_nav_map' or any(
+                record[key] != report[key] for key in ('map_sha256', 'image_sha256')
+            ):
+                continue
+            pose = [float(record['pose'][key]) for key in ('x', 'y', 'yaw')]
+            if all(map(math.isfinite, pose)):
+                points.append(dict(name=path.stem, pose=pose))
+        except (OSError, ValueError, TypeError, KeyError, OverflowError):
+            continue
+    return dict(session=session, points=points)
 
 
 def server(client, port):
@@ -36,6 +59,11 @@ def server(client, port):
                 if png is None:
                     return self.output(503, dict(error='等待 ROS 地图'))
                 return self.output(200, png, 'image/png')
+            if route == '/api/waypoints':
+                try:
+                    return self.output(200, saved_points(client.state()['session']))
+                except (OSError, ValueError, KeyError):
+                    return self.output(503, dict(error='等待读取当前导航地图'))
             if route == '/api/state':
                 try:
                     return self.output(200, client.state())
