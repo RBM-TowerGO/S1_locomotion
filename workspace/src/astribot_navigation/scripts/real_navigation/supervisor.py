@@ -21,7 +21,7 @@ from astribot_nav_sim.grid_world import GridWorld
 from .geometry import safe_pose
 from .localization_runtime import LocalizationRuntime
 from .confidence import Confidence
-from .core import GOAL_XY, GOAL_YAW, at_goal, relative_goal, Lease, speed, controller_parameters, Convergence, SCAN_MAX_SOURCE_AGE, BROWSER_LEASE_SECONDS, LOCALIZATION_MAX_SOURCE_AGE, localization_fresh, nav2_failure_reason, costmap_inflation_radius
+from .core import RouteProgress, GOAL_XY, GOAL_YAW, at_goal, relative_goal, Lease, speed, controller_parameters, Convergence, SCAN_MAX_SOURCE_AGE, BROWSER_LEASE_SECONDS, LOCALIZATION_MAX_SOURCE_AGE, localization_fresh, nav2_failure_reason, costmap_inflation_radius
 from .sensors import Sensors,NS,FRAME
 
 
@@ -53,6 +53,7 @@ class NavigationSupervisor(Node):
         self.goal_attempt=0
         self.tf_paused=False
         self.tf_pause_attempt=None
+        self.route_progress=None
         self.relative_odom_goal=None;self.tolerances=(GOAL_XY,GOAL_YAW)
         self.phase='idle';self.phase_at=0.;self.params_ok=False;self.goal_sent=False
         self.parameter_request=None
@@ -256,6 +257,7 @@ class NavigationSupervisor(Node):
         if value>self.config['max_speed']:raise ValueError('超过配置的导航最高速度')
         if not self.parameters.service_is_ready():raise ValueError('控制器参数服务尚未就绪')
         task=self.lease.begin(obj['owner'],time.monotonic())
+        self.route_progress=None if relative else RouteProgress(value)
         self.relative_odom_goal=odom_goal;self.tolerances=tolerances
         if hasattr(self,'quality') and self.quality.recovery.status=='succeeded':self.quality.recovery.cancel()
         self.state['warning']=None
@@ -276,6 +278,7 @@ class NavigationSupervisor(Node):
             previous=self.parameter_request;self.parameter_request=None
             previous.cancel()
         params=controller_parameters(value,self.tolerances)
+        params.update({'FollowPath.route_task':task,'FollowPath.route_goal_xy':list(self.state['goal'][:2])})
         request=SetParametersAtomically.Request();request.parameters=[Parameter(k,value=v).to_parameter_msg() for k,v in params.items()]
         self.parameter_request=future=self.parameters.call_async(request)
         def applied(f):
@@ -478,6 +481,8 @@ class NavigationSupervisor(Node):
                 if pause:self.tf_pause_attempt=self.goal_attempt
                 else:self.phase_at=now
                 self.event('地图 TF 滞后，暂停并保留目标' if pause else '地图 TF 已恢复，继续原目标')
+            if self.route_progress and (pause or self.phase!='running' or not all(hard.values())):
+                self.route_progress.pause()
             if all(hard.values()):self.fault_since=None
             elif getattr(self,'fault_since',None) is None:self.fault_since=now
             if self.fault_since is not None and now-self.fault_since>=1.:
@@ -501,6 +506,15 @@ class NavigationSupervisor(Node):
                 command=self.cmd if now-self.cmd_at<.5 else (0.,0.,0.)
                 self.state['command_velocity']=list(command)
                 self.state['status']='控制器输出零速度：正在确认朝向、路径或碰撞条件' if not any(command) else '真机导航中'
+                if self.route_progress and all(hard.values()) and self.state['pose'] is not None:
+                    pose,goal=self.state['pose'],self.state['goal']
+                    yaw_error=None
+                    if math.dist(pose[:2],goal[:2])<=.50:
+                        yaw_error=abs(math.remainder(goal[2]-pose[2],2*math.pi))
+                    if self.route_progress.stalled(now,self.odom_pose(),yaw_error):
+                        seconds=math.ceil(self.route_progress.elapsed)
+                        self.stop(f'连续 {seconds} 秒未取得有效行驶进展，结束本次导航','failed',recoverable=True)
+
         mean_motion=self.sensors.settling.mean(now)
         self.state['warnings']=[]
         if self.executor_state.get('warning') and self.phase!='paused':self.state['warnings'].append(self.executor_state['warning'])

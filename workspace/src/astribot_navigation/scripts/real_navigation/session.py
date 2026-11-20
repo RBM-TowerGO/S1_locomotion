@@ -3,6 +3,7 @@ import argparse
 import fcntl
 import datetime
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -56,12 +57,12 @@ def nav_params(config,mapfile,replay):
     horizon=config.get('collision_time_horizon',1.5)
     cp['controller_plugins']=['FollowPath','Nudge','FinalNudge']
     cp['FollowPath']=dict(
-        plugin='nav2_mppi_controller::MPPIController', motion_model='Omni',
+        plugin='towergo::RouteMPPI', motion_model='Omni',
         model_dt=.05, time_steps=max(1, round(horizon/.05)), batch_size=512,
         vx_min=0., wz_max=MAX_ANGULAR_SPEED, **mppi_velocity_limits(config['max_speed']),
         vx_std=.15, vy_std=.10, wz_std=.25, transform_tolerance=.3,
-        critics=['ConstraintCritic','CostCritic','PathFollowCritic','PathAngleCritic',
-                 'GoalCritic','GoalAngleCritic'],
+        critics=['ConstraintCritic','CostCritic','PathFollowCritic','RouteHeadingCritic',
+                 'GoalCritic'],
         CostCritic=dict(consider_footprint=True))
     cp['Nudge']=dict(plugin='towergo::OmniController',desired_linear_vel=.05,collision_time_horizon=horizon)
     cp['FinalNudge']=dict(cp['Nudge'])
@@ -70,6 +71,9 @@ def nav_params(config,mapfile,replay):
     cp['odom_topic']='/towergo/nav/odom'
     cp['goal_checker'].update(plugin='nav2_controller::SimpleGoalChecker', stateful=False,
                               xy_goal_tolerance=GOAL_XY,yaw_goal_tolerance=GOAL_YAW)
+    # Partial endpoints are waypoints. Only the requested final pose owns a yaw tolerance.
+    cp['goal_checker_plugins']=['goal_checker','approach_position']
+    cp['approach_position']=dict(cp['goal_checker'],yaw_goal_tolerance=math.pi+1.e-6)
     for name in ('global_costmap','local_costmap'):
         p=base[name][name]['ros__parameters']
         p['footprint']=json.dumps(config['footprint']);p['footprint_padding']=config['footprint_padding']

@@ -1,0 +1,4 @@
+<library path="towergo_route_heading">
+  <class type="towergo::RouteMPPI" base_class_type="nav2_core::Controller"/>
+  <class name="mppi::critics::RouteHeadingCritic" type="towergo::RouteHeadingCritic" base_class_type="mppi::critics::CriticFunction"/>
+</library>

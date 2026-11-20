@@ -13,6 +13,32 @@ BROWSER_LEASE_SECONDS = 5.0
 LOCALIZATION_MAX_SOURCE_AGE = .8
 
 
+class RouteProgress:
+    """Task-wide odometry progress, independent of Nav2 action retries and map corrections."""
+    def __init__(self, speed_limit):
+        self.deadline = max(60., .24 / speed_limit) if speed_limit > 0 else math.inf
+        self.anchor = None
+        self.previous_tick = None
+        self.elapsed = 0.
+
+    def pause(self):
+        self.previous_tick = None
+
+    def stalled(self, now, odom, final_yaw_error=None):
+        if self.anchor is None or math.dist(self.anchor, odom[:2]) >= .12:
+            self.anchor = tuple(odom[:2])
+            self.best_yaw = final_yaw_error
+            self.elapsed = 0.
+        elif final_yaw_error is not None and (
+                self.best_yaw is None or self.best_yaw - final_yaw_error >= .10):
+            self.best_yaw = final_yaw_error
+            self.elapsed = 0.
+        elif self.previous_tick is not None:
+            self.elapsed += now - self.previous_tick
+        self.previous_tick = now
+        return self.elapsed >= self.deadline
+
+
 def costmap_inflation_radius(config):
     """Smac's center-cost fast path must cover every padded footprint corner."""
     requested=float(config.get('inflation_radius',.85))

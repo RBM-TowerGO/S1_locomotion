@@ -16,7 +16,8 @@ aside{overflow-anchor:none;scrollbar-gutter:stable}
 </style></head><body>
 <header><div><h1>TowerGO <small>真机地图导航</small></h1><small>使用已采集地图 · 定位初始化 · 速度设置 · 单目标导航</small></div><span id="badge">REAL ROBOT</span></header>
 <main><aside><section class="notification-panel" aria-label="状态、警告与诊断"><div id="status">正在连接真机…</div><div id="error" role="alert"></div><p id="servererror" style="color:#ffb8a7" role="alert"></p><details id="logs"><summary>导航诊断日志</summary><pre id="diagnostics" style="white-space:pre-wrap;font-size:12px;color:#ffbd75"></pre></details></section>
-<h2>设置导航任务</h2><div class="controls"><button id="start" onclick="mode('start')">① 初始化定位</button><button id="goal" onclick="mode('goal')">② 设置终点</button></div>
+<h2>设置导航任务</h2><div class="controls"><button id="autoStart" onclick="autoLocalize()">① 初始化定位（自动校准）</button><button id="start" onclick="mode('start')">手动指定起点</button><button id="goal" onclick="mode('goal')">② 设置终点</button></div>
+<p id="calibration" role="status"></p>
 <div class="heading"><label for="saved">已保存的导航点</label><select id="saved" disabled><option>等待导航连接</option></select></div>
 <p>选定模式后，在地图上按下并拖拽：按下位置为坐标，拖拽方向为朝向。短点击使用下方角度。确认后才提交。</p>
 <div class="heading"><label for="yaw">朝向（度）</label><input id="yaw" type="number" value="0" step="5"></div>
@@ -71,6 +72,7 @@ $('saved').onchange=()=>{
 const drafts={start:null,goal:null};
 let savedGoal='', acceptedStart=null;
 function mode(value){
+  if(searching)searchGeneration++;
   if(tool in drafts)drafts[tool]=selection;
   if(tool==='goal')savedGoal=$('saved').value;
   down=null;
@@ -89,10 +91,190 @@ function mode(value){
   draw();
 }
 function resetMarkers(){
+  searchGeneration++;calibrationId=null;$('calibration').textContent='';
   mode('pan');
   drafts.start=drafts.goal=acceptedStart=null;
   savedGoal='';
 }
+// Pixels use bottom-up grid coordinates. Pose yaw is relative to the grid here.
+function matchMap({map, pixels, points, checkPose, seed}) {
+  const {width:w,height:h,resolution:r,origin:o}=map;
+  points=points.filter(([x,y])=>Number.isFinite(x+y)&&Math.hypot(x,y)>=.2&&Math.hypot(x,y)<=25);
+  if(points.length<100)throw Error('有效雷达点不足，请保持静止后重试');
+  const cells=new Uint8Array(w*h),distance=new Float32Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x;
+    cells[i]=pixels[((h-1-y)*w+x)*4];
+    distance[i]=10000;
+  }
+  for(let i=w+1;i<w*h-w-1;i++)if(cells[i]===35&&[1,-1,w,-w].some(d=>cells[i+d]===245))distance[i]=0;
+  for(let i=0;i<w*h;i++){
+    if(i%w)distance[i]=Math.min(distance[i],distance[i-1]+1);
+    if(i>=w)distance[i]=Math.min(distance[i],distance[i-w]+1);
+  }
+  for(let i=w*h-1;i>=0;i--){
+    if(i%w<w-1)distance[i]=Math.min(distance[i],distance[i+1]+1);
+    if(i+w<w*h)distance[i]=Math.min(distance[i],distance[i+w]+1);
+  }
+  function offsets(a,n){
+    const c=Math.cos(a)/r,s=Math.sin(a)/r, result=[];
+    for(let k=0;k<n;k++){
+      const [x,y]=points[Math.floor(k*points.length/n)];
+      result.push([Math.round(c*x-s*y),Math.round(s*x+c*y)]);
+    }
+    return result;
+  }
+  function score(x,y,ends){
+    if(x<0||y<0||x>=w||y>=h||cells[y*w+x]!==245)return 1;
+    let sum=0;
+    for(const [dx,dy] of ends){
+      const px=x+dx,py=y+dy,i=py*w+px;
+      sum+=px<0||py<0||px>=w||py>=h||cells[i]===205?1:Math.min(1,distance[i]*r);
+    }
+    return sum/ends.length;
+  }
+  function validate(p){
+    const ends=offsets(p.a,points.length);
+    let hits=0, known=0, walls=0,unknown=0, steps=0;
+    for(const [dx,dy] of ends){
+      const px=p.x+dx,py=p.y+dy;
+      if(px>=0&&py>=0&&px<w&&py<h&&cells[py*w+px]!==205){
+        known++;
+        if(distance[py*w+px]*r<=.2)hits++;
+      }
+      const n=Math.ceil(Math.hypot(dx,dy)*r/.3);
+      for(let j=1;j<n;j++){
+        const x=p.x+Math.round(dx*j/n),y=p.y+Math.round(dy*j/n);
+        const cell=x>=0&&y>=0&&x<w&&y<h?cells[y*w+x]:205;
+        walls+=cell===35;unknown+=cell===205;steps++;
+      }
+    }
+    return hits/ends.length>=.6&&known/ends.length>=.7&&steps>0&&walls/steps<.12&&unknown/steps<.3;
+  }
+  if(checkPose){
+    if(!validate(checkPose))throw Error('新的扫描未能复核坐标，请手动指定起点');
+    return checkPose;
+  }
+  const stride=Math.max(1,Math.round(.25/r)),seeds=[];
+  const apart=(p,q)=>Math.hypot(p.x-q.x,p.y-q.y)*r>.65||
+    Math.abs(Math.atan2(Math.sin(p.a-q.a),Math.cos(p.a-q.a)))>.20;
+  let sx,sy;
+  if(seed){
+    const dx=seed[0]-o[0],dy=seed[1]-o[1],c=Math.cos(o[2]),s=Math.sin(o[2]);
+    sx=(c*dx+s*dy)/r;sy=(-s*dx+c*dy)/r;
+  }
+  for(let deg=0;deg<360;deg+=5){
+    const a=deg*Math.PI/180, ends=offsets(a,64), group=[];
+    if(seed&&Math.abs(Math.atan2(Math.sin(a+o[2]-seed[2]),Math.cos(a+o[2]-seed[2])))>Math.PI/6)continue;
+    const x0=seed?Math.max(0,Math.floor(sx-1/r)):0,y0=seed?Math.max(0,Math.floor(sy-1/r)):0;
+    for(let y=y0;y<(seed?Math.min(h,sy+1/r):h);y+=stride)for(let x=x0;x<(seed?Math.min(w,sx+1/r):w);x+=stride){
+      const v=score(x,y,ends);
+      if(v<.48)group.push({x,y,a,v});
+    }
+    group.sort((p,q)=>p.v-q.v);
+    const picks=[];
+    for(const p of group)if(picks.every(q=>apart(p,q))){
+      picks.push(p);if(picks.length===8)break;
+    }
+    seeds.push(...picks);
+  }
+  seeds.sort((p,q)=>p.v-q.v);
+  const distinct=[];
+  for(const p of seeds)if(distinct.every(q=>apart(p,q))){
+    distinct.push(p);if(distinct.length===32)break;
+  }
+  const refined=distinct.map(p=>{
+    let best={...p,v:1};
+    for(let deg=-5;deg<=5;deg++){
+      const a=p.a+deg*Math.PI/180, ends=offsets(a,128);
+      for(let y=p.y-stride;y<=p.y+stride;y++)for(let x=p.x-stride;x<=p.x+stride;x++){
+        const v=score(x,y,ends);if(v<best.v)best={x,y,a,v};
+      }
+    }
+    best.v=score(best.x,best.y,offsets(best.a,points.length));return best;
+  }).sort((p,q)=>p.v-q.v);
+  const best=refined[0];
+  if(!best||!validate(best))throw Error('扫描与地图无法可靠对齐，请手动指定起点');
+  if(refined.some(p=>apart(p,best)&&p.v<=best.v*1.25+.015&&validate(p)))
+    throw Error('地图上有多个相似位置，请手动指定起点');
+  const x=(best.x+.5)*r,y=(best.y+.5)*r,c=Math.cos(o[2]),s=Math.sin(o[2]);
+  return {...best,pose:[o[0]+c*x-s*y,o[1]+s*x+c*y,o[2]+best.a]};
+}
+let searching=false,searchGeneration=0;
+function stationary(s){
+  return s?.executor?.stationary===true&&!s.busy&&s.phase==='idle'&&!s.sensor_error&&s.sensors_ready;
+}
+async function autoLocalize(){
+  if(searching)return;
+  const generation=++searchGeneration, session=state?.session, version=state?.map_version;
+  const initialId=state?.localization?.id;
+  const seed=tool==='start'&&selection?selection.slice():null;
+  const output=$('calibration');
+  let worker,url;
+  function current(){
+    if(generation!==searchGeneration||session!==state?.session||version!==state?.map_version||
+       initialId!==state?.localization?.id||!stationary(state)||Date.now()-lastOK>1000)
+      throw Error('定位条件已变化，请保持静止后重试');
+  }
+  try{
+    current();
+    if(state.localization.status==='pending')throw Error('已有初始化请求，请等待结果');
+    if(!img.complete||img.naturalWidth!==state.map.width)throw Error('等待地图加载');
+    searching=true;
+    const surface=document.createElement('canvas');
+    surface.width=state.map.width;surface.height=state.map.height;
+    const context=surface.getContext('2d');
+    context.drawImage(img,0,0);
+    const pixels=context.getImageData(0,0,surface.width,surface.height).data;
+    const code=matchMap.toString()+';onmessage=e=>{try{postMessage({result:matchMap(e.data)})}catch(err){postMessage({error:err.message})}}';
+    url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));worker=new Worker(url);
+    function match(scan,checkPose){
+      return new Promise((resolve,reject)=>{
+        worker.onmessage=e=>e.data.error?reject(Error(e.data.error)):resolve(e.data.result);
+        worker.onerror=()=>reject(Error('地图匹配计算失败'));
+        worker.postMessage({map:state.map,pixels,points:scan.points,seed,checkPose});
+      });
+    }
+    async function newScan(after){
+      for(let i=0;i<35;i++){
+        current();
+        const scan=state.local_scan;
+        if(scan&&scan.age<=.5&&scan.stamp>after)return scan;
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      throw Error('未收到新鲜雷达扫描，请检查雷达状态');
+    }
+    output.textContent=seed?'正在起点附近校准…':'正在全图匹配雷达扫描…';
+    let scan=await newScan(0);
+    const candidate=await match(scan,null);
+    for(let i=0;i<2;i++){
+      scan=await newScan(scan.stamp);
+      await match(scan,candidate);
+    }
+    current();
+    const [x,y,yaw]=candidate.pose;
+    const reply=await post('localize',{x,y,yaw});
+    if(!reply)throw Error($('error').textContent);
+    acceptedStart={pose:candidate.pose,id:reply.localization_id};
+    calibrationId=reply.localization_id;
+    output.textContent='已提交匹配坐标，等待 AMCL 校准';
+    draw();
+  }catch(e){output.textContent=e.message}
+  finally{worker?.terminate();if(url)URL.revokeObjectURL(url);searching=false}
+}
+let calibrationId=null;
+function updateCalibration(){
+  if(searching&&!stationary(state))searchGeneration++;
+  $('autoStart').disabled=searching||state.busy||state.localization?.status==='pending';
+  if(calibrationId!==null&&state.localization?.id===calibrationId){
+    const loc=state.localization;
+    $('calibration').textContent=loc.status==='succeeded'&&state.pose?
+      'AMCL 校准完成：'+state.pose.slice(0,2).map(v=>v.toFixed(2)).join(' / ')+' m · '+(state.pose[2]*180/Math.PI).toFixed(1)+'°':
+      loc.status==='pending'?'AMCL 正在校准…':(loc.reason||state.status);
+    if(loc.status!=='pending')calibrationId=null;
+  }
+}
+
 function resize(){const r=cv.getBoundingClientRect();cv.width=Math.round(r.width*devicePixelRatio);cv.height=Math.round(r.height*devicePixelRatio);ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);if(!fitted&&state)fit();else draw()}
 function fit(){if(!state)return;const m=state.map,r=cv.getBoundingClientRect();scale=Math.min((r.width-55)/m.width,(r.height-95)/m.height);ox=(r.width-m.width*scale)/2;oy=(r.height-m.height*scale)/2;fitted=true;draw()}
 function screen(p){const m=state.map,a=m.origin[2],dx=p[0]-m.origin[0],dy=p[1]-m.origin[1];return [ox+(Math.cos(a)*dx+Math.sin(a)*dy)/m.resolution*scale,oy+(m.height-(-Math.sin(a)*dx+Math.cos(a)*dy)/m.resolution)*scale]}
@@ -110,7 +292,7 @@ function drawPreview(r){
  ctx.restore();
 }
 function point(e){const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]}
-cv.onpointerdown=e=>{if(!state)return;cv.setPointerCapture(e.pointerId);const p=point(e);down={p,ox,oy};if(tool!=='pan'){$('saved').value='';selection=[...world(p),Number($('yaw').value)*Math.PI/180];draw()}};
+cv.onpointerdown=e=>{if(!state)return;if(searching)searchGeneration++;cv.setPointerCapture(e.pointerId);const p=point(e);down={p,ox,oy};if(tool!=='pan'){$('saved').value='';selection=[...world(p),Number($('yaw').value)*Math.PI/180];draw()}};
 cv.onpointermove=e=>{if(!down)return;const p=point(e);if(tool==='pan'){ox=down.ox+p[0]-down.p[0];oy=down.oy+p[1]-down.p[1]}else{const w=world(p);if(Math.hypot(p[0]-down.p[0],p[1]-down.p[1])>6){selection[2]=Math.atan2(w[1]-selection[1],w[0]-selection[0]);$('yaw').value=Math.round(selection[2]*180/Math.PI)}}draw()};
 function showSelection(){if(selection){$('selection').textContent=`(${selection[0].toFixed(2)}, ${selection[1].toFixed(2)}) m · ${(selection[2]*180/Math.PI).toFixed(0)}°`;$('submit').disabled=false;$('submit').textContent=tool==='start'?'确认起点 / 初始化定位':'确认终点 / 开始导航'}}
 cv.onpointerup=()=>{showSelection();down=null};cv.onpointercancel=()=>{down=null};
@@ -124,14 +306,14 @@ async function nudge(x,y,w){
   await post('nudge',{dx:x*amount/100,dy:y*amount/100,dyaw:w*amount*Math.PI/180,speed:Number($('speed').value)});
 }
 async function submit(){if(!selection||($('saved').value&&($('saved').disabled||Date.now()-lastOK>2000)))return;const chosen=selection,kind=tool,session=state.session;const p=chosen.slice();if(tool==='goal'&&!$('speed').reportValidity())return;const reply=await post(kind==='start'?'localize':kind,{x:p[0],y:p[1],yaw:p[2],speed:Number($('speed').value)});if(reply){if(state.session!==session)return;if(kind==='start')acceptedStart={pose:p, id:reply.localization_id};if(drafts[kind]===chosen)drafts[kind]=null;if(tool!==kind||selection!==chosen){draw();return}selection=null;$('saved').value='';$('submit').disabled=true;$('selection').textContent='请求已提交，等待真机服务确认';draw()}}
-async function stop(){await post('stop',{})}
+async function stop(){searchGeneration++;await post('stop',{})}
 document.addEventListener('keydown',e=>{
  const editing=e.target?.matches?.('input,textarea,select,[contenteditable="true"]');
  if(e.key!=='Escape' && !(e.code==='Space'&&!editing))return;
  e.preventDefault();if(!e.repeat)void stop();
 });
 
-async function poll(){try{const r=await fetch('/api/state',{signal:AbortSignal.timeout(2000)});if(!r.ok)throw Error('连接失败');const next=await r.json();if(state&&state.session!==next.session)resetMarkers();state=next;if(acceptedStart&&state.start&&state.localization?.id>=acceptedStart.id)acceptedStart=null;if(pointsSession!==state.session&&Date.now()>=retryPoints)loadPoints(state.session);if(state.map_version&&state.map_version!==mapVersion){mapVersion=state.map_version;img.src='/map.png?v='+mapVersion} $('badge').textContent=state.replay?'REPLAY · 无真机控制':'REAL ROBOT';lastOK=Date.now();$('status').textContent=state.status;$('health').textContent='最高速度：'+state.max_speed+' m/s · '+Object.entries(state.pipeline?.source_age_s||{}).map(([k,v])=>k+' 源数据 '+v.toFixed(2)+'s').join(' / ')+' · '+(state.sensors_ready?'传感器就绪':'传感器未就绪')+' · 定位：'+(state.localization?.status||'idle')+' · 匹配：'+(state.localization_quality?.status||'等待')+' '+(state.localization_quality?.reason||'')+' · 路径执行：'+({stopping_before_turn:'停车确认',turning:'原地对准下一段',stopping_before_straight:'转向后停车确认',straight:'直线行驶',stopping_at_corner:'转折点停车确认',final_turn:'终点原地调整朝向',stopping_at_goal:'终点停车确认',done:'完成'}[state.route_execution?.stage]||(state.navigation_style==='omni'?'全向跟踪 · 并行规划':'等待'))+' · 位置不确定性：'+(state.localization_confidence?.sigma_position_m?.toFixed(2)??'—')+' m · 朝向不确定性：'+(state.localization_confidence?.sigma_yaw_deg?.toFixed(1)??'—')+'° · 重评估：'+(state.localization_reassessment?.status||'idle')+' · 回退恢复：'+(state.recovery?state.recovery.attempt+'/2 · '+state.recovery.phase+' · '+state.recovery.progress.toFixed(2)+' m':'无')+' · 定位恢复：'+(state.localization_quality?.recovery?.status||'idle');$('servererror').textContent=(state.phase==='stopping'&&state.stop_checks?.pending?.length?'停车确认等待：'+state.stop_checks.pending.join('；')+(state.error?'。'+state.error:''):state.error)||(state.localization_confidence?.status==='warning'?'定位置信度告警：'+state.localization_confidence.reason:'')||(state.warnings||[]).join('；');$('diagnostics').textContent=(state.diagnostics||[]).join('\n\n')||'暂无导航警告或错误';if(!selection)$('selection').textContent=state.busy?'导航任务执行中':state.status;$('connection').textContent=state.ready?'连接正常 · 导航就绪':state.initialized?'连接正常 · 定位有效':'连接正常 · 定位未就绪';$('connection').style.color=state.ready?'#64dfb6':'#ffbd75';$('mapinfo').textContent=`真实采集地图 · ${state.map.resolution} m/格`;$('xy').textContent=state.pose?state.pose.slice(0,2).map(x=>x.toFixed(2)).join(' / '):'—';$('angle').textContent=state.pose?(state.pose[2]*180/Math.PI).toFixed(1)+'°':'—';$('linear').textContent=state.velocity.slice(0,2).map(v=>v.toFixed(3)).join(' / ')+' m/s';$('angular').textContent=state.velocity[2].toFixed(3)+' rad/s';$('distance').textContent=state.distance_remaining==null?'—':state.distance_remaining.toFixed(2)+' m';$('runmode').textContent=state.mode_label;$('scan_status').textContent=(state.laser_scan_status||'等待雷达扫描')+(state.laser_scan_age==null?'':' · '+state.laser_scan_age.toFixed(2)+' 秒前');$('speed').disabled=state.busy;$('nudge').disabled=state.busy||!state.ready||!['hardware','mock'].includes(state.mode);$('start').disabled=state.busy||state.phase==='stopping';$('goal').disabled=state.busy||!state.initialized||!['hardware','mock'].includes(state.mode)||(state.owner&&state.owner!==owner&&state.busy);$('submit').disabled=!selection||state.busy||(tool==='goal'&&(!['hardware','mock'].includes(state.mode)||Number($('speed').value)===0));$('saved').disabled=!points.length||!state.ready||$('goal').disabled;if($('saved').value&&$('saved').disabled)$('submit').disabled=true;if(!fitted)fit();draw()}catch(e){$('saved').disabled=true;if($('saved').value)$('submit').disabled=true;$('connection').textContent='连接中断 · 显示为历史快照';$('connection').style.color='#ffb8a7';$('error').textContent='无法获取实时状态，请检查 SSH 隧道和导航终端';if(state){state.laser_scan=[];state.obstacles=[];state.local_scan=null;draw()}$('scan_status').textContent='连接中断，已隐藏实时扫描';}finally{setTimeout(poll,300)}}
+async function poll(){try{const r=await fetch('/api/state',{signal:AbortSignal.timeout(2000)});if(!r.ok)throw Error('连接失败');const next=await r.json();if(state&&state.session!==next.session)resetMarkers();state=next;updateCalibration();if(acceptedStart&&state.start&&state.localization?.id>=acceptedStart.id)acceptedStart=null;if(pointsSession!==state.session&&Date.now()>=retryPoints)loadPoints(state.session);if(state.map_version&&state.map_version!==mapVersion){mapVersion=state.map_version;img.src='/map.png?v='+mapVersion} $('badge').textContent=state.replay?'REPLAY · 无真机控制':'REAL ROBOT';lastOK=Date.now();$('status').textContent=state.status;$('health').textContent='最高速度：'+state.max_speed+' m/s · '+Object.entries(state.pipeline?.source_age_s||{}).map(([k,v])=>k+' 源数据 '+v.toFixed(2)+'s').join(' / ')+' · '+(state.sensors_ready?'传感器就绪':'传感器未就绪')+' · 定位：'+(state.localization?.status||'idle')+' · 匹配：'+(state.localization_quality?.status||'等待')+' '+(state.localization_quality?.reason||'')+' · 路径执行：'+({stopping_before_turn:'停车确认',turning:'原地对准下一段',stopping_before_straight:'转向后停车确认',straight:'直线行驶',stopping_at_corner:'转折点停车确认',final_turn:'终点原地调整朝向',stopping_at_goal:'终点停车确认',done:'完成'}[state.route_execution?.stage]||(state.navigation_style==='omni'?'全向跟踪 · 并行规划':'等待'))+' · 位置不确定性：'+(state.localization_confidence?.sigma_position_m?.toFixed(2)??'—')+' m · 朝向不确定性：'+(state.localization_confidence?.sigma_yaw_deg?.toFixed(1)??'—')+'° · 重评估：'+(state.localization_reassessment?.status||'idle')+' · 回退恢复：'+(state.recovery?state.recovery.attempt+'/2 · '+state.recovery.phase+' · '+state.recovery.progress.toFixed(2)+' m':'无')+' · 定位恢复：'+(state.localization_quality?.recovery?.status||'idle');$('servererror').textContent=(state.phase==='stopping'&&state.stop_checks?.pending?.length?'停车确认等待：'+state.stop_checks.pending.join('；')+(state.error?'。'+state.error:''):state.error)||(state.localization_confidence?.status==='warning'?'定位置信度告警：'+state.localization_confidence.reason:'')||(state.warnings||[]).join('；');$('diagnostics').textContent=(state.diagnostics||[]).join('\n\n')||'暂无导航警告或错误';if(!selection)$('selection').textContent=state.busy?'导航任务执行中':state.status;$('connection').textContent=state.ready?'连接正常 · 导航就绪':state.initialized?'连接正常 · 定位有效':'连接正常 · 定位未就绪';$('connection').style.color=state.ready?'#64dfb6':'#ffbd75';$('mapinfo').textContent=`真实采集地图 · ${state.map.resolution} m/格`;$('xy').textContent=state.pose?state.pose.slice(0,2).map(x=>x.toFixed(2)).join(' / '):'—';$('angle').textContent=state.pose?(state.pose[2]*180/Math.PI).toFixed(1)+'°':'—';$('linear').textContent=state.velocity.slice(0,2).map(v=>v.toFixed(3)).join(' / ')+' m/s';$('angular').textContent=state.velocity[2].toFixed(3)+' rad/s';$('distance').textContent=state.distance_remaining==null?'—':state.distance_remaining.toFixed(2)+' m';$('runmode').textContent=state.mode_label;$('scan_status').textContent=(state.laser_scan_status||'等待雷达扫描')+(state.laser_scan_age==null?'':' · '+state.laser_scan_age.toFixed(2)+' 秒前');$('speed').disabled=state.busy;$('nudge').disabled=state.busy||!state.ready||!['hardware','mock'].includes(state.mode);$('start').disabled=state.busy||state.phase==='stopping';$('goal').disabled=state.busy||!state.initialized||!['hardware','mock'].includes(state.mode)||(state.owner&&state.owner!==owner&&state.busy);$('submit').disabled=!selection||state.busy||(tool==='goal'&&(!['hardware','mock'].includes(state.mode)||Number($('speed').value)===0));$('saved').disabled=!points.length||!state.ready||$('goal').disabled;if($('saved').value&&$('saved').disabled)$('submit').disabled=true;if(!fitted)fit();draw()}catch(e){$('saved').disabled=true;if($('saved').value)$('submit').disabled=true;$('connection').textContent='连接中断 · 显示为历史快照';$('connection').style.color='#ffb8a7';$('error').textContent='无法获取实时状态，请检查 SSH 隧道和导航终端';if(state){state.laser_scan=[];state.obstacles=[];state.local_scan=null;draw()}$('scan_status').textContent='连接中断，已隐藏实时扫描';}finally{setTimeout(poll,300)}}
 new ResizeObserver(resize).observe(cv);mode('pan');poll();
 setInterval(()=>{if(state&&state.command_velocity)$('command').textContent=(state.applied_command_velocity||state.command_velocity).map(v=>v.toFixed(3)).join(' / ');if(state&&Date.now()-lastOK>1000){state.local_scan=null;state.laser_scan=[];state.obstacles=[];draw()}},300);
 </script></body></html>
